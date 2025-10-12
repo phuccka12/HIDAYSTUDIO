@@ -1,0 +1,90 @@
+@startuml
+' Class diagram for IELTS platform (Vietnamese labels)
+' Entities: User, Exam, Section, Question, Choice, Media, Attempt/Submission
+
+skinparam classAttributeIconSize 0
+
+class User {
+  +ObjectId _id
+  +String email
+  +String full_name
+  +String role
+  +String avatar_url
+  +Date created_at
+}
+
+class Media {
+  +String url
+  +String type
+  +Map meta
+}
+
+class Choice {
+  +String id
+  +String text
+  +Boolean isCorrect
+  +Map meta
+}
+
+class Question {
+  +String id
+  +String type
+  +String prompt
+  +Number points
+  +List<Choice> choices
+  +Map metadata
+  +List<Media> media
+}
+
+class Section {
+  +String id
+  +String type
+  +String title
+  +String instructions
+  +List<Media> mediaRefs
+  +List<Question> questions
+}
+
+class Exam {
+  +ObjectId _id
+  +String title
+  +String slug
+  +String description
+  +List<String> tags
+  +ObjectId authorId
+  +List<Section> sections
+  +Map settings
+  +Boolean published
+  +Date scheduledAt
+  +Number version
+}
+
+class Attempt {
+  +ObjectId _id
+  +ObjectId examId
+  +ObjectId userId
+  +Date startedAt
+  +Date submittedAt
+  +Map answers // questionId -> answer
+  +Map results // per-question scoring
+  +Number totalScore
+  +String status // pending/graded/auto-graded
+}
+
+' Relationships (composition/aggregation)
+User "1" <-- "0..*" Attempt : thực hiện
+User "1" <-- "0..*" Exam : tạo
+Exam "1" *-- "0..*" Section : chứa
+Section "1" *-- "0..*" Question : chứa
+Question "1" *-- "0..*" Choice : có
+Question "1" *-- "0..*" Media : đính kèm
+Section "1" *-- "0..*" Media : mediaRef
+Exam "1" <-- "0..*" Attempt : nhận
+
+note right of Exam
+  Ghi chú:
+  - Question có thể là các loại: mcq, multi, essay, fill, match, reorder, audio
+  - Choice chỉ dùng cho các loại lựa chọn
+end note
+
+@enduml

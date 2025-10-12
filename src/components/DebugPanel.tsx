@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../services/supabase';
+import { authService } from '../services/api';
+import { apiFetch } from '../services/_apiClient';
 
 const DebugPanel: React.FC = () => {
   const { user, refreshUser } = useAuth();
@@ -10,29 +11,21 @@ const DebugPanel: React.FC = () => {
   const checkDatabaseDirectly = async () => {
     setIsLoading(true);
     try {
-      // Check current session
-      const { data: session } = await supabase.auth.getSession();
-      console.log('Current session:', session);
+      // Check current session via backend
+      const { data: sessionData } = await authService.getSession();
+      console.log('Current session:', sessionData);
 
-      if (session?.session?.user) {
-        // Query profiles table directly
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.session.user.id)
-          .single();
+      if (sessionData?.session?.user) {
+        const userId = sessionData.session.user.id;
+
+        const { data: profile, error } = await apiFetch(`/profiles/${userId}`) as any;
+        const { data: allProfiles, error: allError } = await apiFetch('/profiles') as any;
 
         console.log('Direct profile query result:', { profile, error });
-
-        // Also check all profiles to see if user exists
-        const { data: allProfiles, error: allError } = await supabase
-          .from('profiles')
-          .select('*');
-
         console.log('All profiles:', { allProfiles, allError });
 
         setDebugInfo({
-          sessionUser: session.session.user,
+          sessionUser: sessionData.session.user,
           profileQuery: { profile, error },
           allProfiles: { allProfiles, allError },
           currentUser: user
@@ -49,22 +42,15 @@ const DebugPanel: React.FC = () => {
   const forceCreateAdminProfile = async () => {
     setIsLoading(true);
     try {
-      const { data: session } = await supabase.auth.getSession();
-      if (session?.session?.user) {
-        const { data, error } = await supabase
-          .from('profiles')
-          .upsert({
-            id: session.session.user.id,
-            full_name: session.session.user.email,
-            role: 'admin',
-            updated_at: new Date().toISOString()
-          }, {
-            onConflict: 'id'
-          });
+      const { data: sessionData } = await authService.getSession();
+      if (sessionData?.session?.user) {
+        const userId = sessionData.session.user.id;
+        const { data, error } = await apiFetch(`/profiles/${userId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ id: userId, full_name: sessionData.session.user.email, role: 'admin', updated_at: new Date().toISOString() })
+        }) as any;
 
         console.log('Force create admin result:', { data, error });
-        
-        // Refresh user after creating profile
         await refreshUser();
       }
     } catch (error) {

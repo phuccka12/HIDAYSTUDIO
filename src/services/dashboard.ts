@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { apiFetch } from './_apiClient';
 
 // Dashboard data interfaces
 export interface DashboardStats {
@@ -41,31 +41,9 @@ export const dashboardService = {
   // Get admin dashboard stats
   async getAdminStats(): Promise<DashboardStats> {
     try {
-      // Get total users count
-      const { count: totalUsers } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true });
-
-      // Get total writing submissions count  
-      const { count: totalSubmissions } = await supabase
-        .from('writing_submissions')
-        .select('*', { count: 'exact', head: true });
-
-      // Get active users (users who logged in within last 30 days)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
-      const { count: activeUsers } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .gte('updated_at', thirtyDaysAgo.toISOString());
-
-      return {
-        totalUsers: totalUsers || 0,
-        totalSubmissions: totalSubmissions || 0,
-        activeUsers: activeUsers || 0,
-        databaseSize: 'N/A', // This would need database admin access
-      };
+      const { data, error } = await apiFetch('/admin/stats');
+      if (error) throw error;
+      return data as DashboardStats;
     } catch (error) {
       console.error('Error fetching admin stats:', error);
       return {
@@ -80,23 +58,12 @@ export const dashboardService = {
   // Get user's personal progress
   async getUserProgress(userId: string): Promise<UserProgress[]> {
     try {
-      const { data, error } = await supabase
-        .from('user_progress')
-        .select('*')
-        .eq('user_id', userId);
-
+      const { data, error } = await apiFetch(`/users/${userId}/progress`);
       if (error) {
         console.error('Error fetching user progress:', error);
         return [];
       }
-
-      return data?.map(item => ({
-        skill: item.skill_type,
-        current: item.current_level || 0,
-        target: item.target_score || 7.0,
-        totalExercises: item.total_exercises || 0,
-        completedExercises: item.completed_exercises || 0,
-      })) || [];
+      return data as UserProgress[] || [];
     } catch (error) {
       console.error('Error fetching user progress:', error);
       return [];
@@ -106,31 +73,12 @@ export const dashboardService = {
   // Get recent writing submissions (for admin)
   async getRecentSubmissions(limit: number = 10): Promise<WritingSubmission[]> {
     try {
-      const { data, error } = await supabase
-        .from('writing_submissions')
-        .select(`
-          *,
-          profiles(email)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(limit);
-
+      const { data, error } = await apiFetch(`/admin/recent-submissions?limit=${limit}`);
       if (error) {
         console.error('Error fetching recent submissions:', error);
         return [];
       }
-
-      return data?.map(item => ({
-        id: item.id,
-        userId: item.user_id,
-        taskType: item.task_type,
-        prompt: item.prompt,
-        content: item.content,
-        aiScore: item.ai_score,
-        aiFeedback: item.ai_feedback,
-        createdAt: item.created_at,
-        userEmail: (item.profiles as any)?.email,
-      })) || [];
+      return data as WritingSubmission[] || [];
     } catch (error) {
       console.error('Error fetching recent submissions:', error);
       return [];
@@ -140,19 +88,12 @@ export const dashboardService = {
   // Get user's writing submissions
   async getUserSubmissions(userId: string, limit: number = 5): Promise<WritingSubmission[]> {
     try {
-      const { data, error } = await supabase
-        .from('writing_submissions')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(limit);
-
+      const { data, error } = await apiFetch(`/users/${userId}/submissions?limit=${limit}`);
       if (error) {
         console.error('Error fetching user submissions:', error);
         return [];
       }
-
-      return data || [];
+      return data as WritingSubmission[] || [];
     } catch (error) {
       console.error('Error fetching user submissions:', error);
       return [];
@@ -162,17 +103,10 @@ export const dashboardService = {
   // Create or update user progress
   async updateUserProgress(userId: string, skillType: string, progress: Partial<UserProgress>): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('user_progress')
-        .upsert({
-          user_id: userId,
-          skill_type: skillType,
-          current_level: progress.current,
-          target_score: progress.target,
-          total_exercises: progress.totalExercises,
-          completed_exercises: progress.completedExercises,
-          updated_at: new Date().toISOString(),
-        });
+      const { error } = await apiFetch(`/users/${userId}/progress`, {
+        method: 'PUT',
+        body: JSON.stringify({ skillType, progress })
+      });
 
       if (error) {
         console.error('Error updating user progress:', error);
@@ -185,4 +119,67 @@ export const dashboardService = {
       return false;
     }
   },
+
+  // Admin: list users
+  async listUsers(): Promise<Array<any>> {
+    try {
+      const { data, error } = await apiFetch('/admin/users');
+      if (error) throw error;
+      return data as any[] || [];
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      return [];
+    }
+  },
+
+  // Admin: update user role
+  async updateUserRole(userId: string, role: 'user' | 'admin') {
+    try {
+      const { data, error } = await apiFetch(`/admin/users/${userId}/role`, {
+        method: 'PUT',
+        body: JSON.stringify({ role }),
+      });
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      throw error;
+    }
+  },
+
+  // Admin: delete user
+  async deleteUser(userId: string) {
+    try {
+      const { data, error } = await apiFetch(`/admin/users/${userId}`, { method: 'DELETE' });
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      throw error;
+    }
+  }
+,
+  // Admin: create user
+  async createUser(payload: { email: string; password: string; full_name?: string; role?: string }) {
+    try {
+      const { data, error } = await apiFetch('/admin/users', { method: 'POST', body: JSON.stringify(payload) });
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error creating user:', error);
+      throw error;
+    }
+  },
+
+  // Admin: change user password
+  async changeUserPassword(userId: string, newPassword: string) {
+    try {
+      const { data, error } = await apiFetch(`/admin/users/${userId}/password`, { method: 'PUT', body: JSON.stringify({ newPassword }) });
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error changing user password:', error);
+      throw error;
+    }
+  }
 };

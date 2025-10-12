@@ -1,8 +1,6 @@
--- ========================================
--- RLS POLICIES FOR IELTS LEARNING PLATFORM
--- ========================================
--- Run this script in Supabase SQL Editor to fix 403 permission errors
-
+-- Supabase RLS policies removed
+-- This file previously contained RLS policy SQL for Supabase and has been
+-- removed because the project now uses MongoDB. Restore from backups if needed.
 -- 1. PROFILES TABLE POLICIES
 -- ========================================
 

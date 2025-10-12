@@ -1,0 +1,29 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Quản trị viên/Teacher" as Admin
+actor "Học viên" as Student
+actor "Khách" as Guest
+
+rectangle "Hệ thống IELTS" {
+  Admin -- (Đăng nhập/Quản lý người dùng)
+  Admin -- (Tạo/Biên tập đề thi)
+  Admin -- (Tải media / quản lý media)
+  Admin -- (Xem báo cáo & chấm điểm)
+
+  Student -- (Đăng ký / Đăng nhập)
+  Student -- (Xem danh sách đề thi công khai)
+  Student -- (Làm đề thi)
+  Student -- (Nộp bài & xem kết quả)
+
+  Guest -- (Duyệt landing / xem đề mẫu)
+}
+
+note bottom
+  Luồng chính:
+  1. Admin tạo exam -> thêm section -> thêm câu hỏi -> publish
+  2. Student xem exam -> làm bài -> hệ thống auto chấm (với MCQ) -> essay chờ chấm tay
+end note
+
+@enduml

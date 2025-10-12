@@ -74,7 +74,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle, isMenuOpen }) => {
                   Trang chủ
                   <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-600 to-purple-600 group-hover:w-full transition-all duration-200"></span>
                 </Link>
-                <Link to="/dashboard" className="relative text-gray-600 hover:text-blue-600 font-medium transition-all duration-200 group">
+                <Link to="/user" className="relative text-gray-600 hover:text-blue-600 font-medium transition-all duration-200 group">
                   Dashboard
                   <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-600 to-purple-600 group-hover:w-full transition-all duration-200"></span>
                 </Link>
@@ -138,13 +138,13 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle, isMenuOpen }) => {
                 {userMenuOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
                     <Link 
-                      to={user?.role === 'admin' ? '/admin-dashboard' : '/user-dashboard'} 
+                      to={user?.role === 'admin' ? '/admin-dashboard' : '/user'} 
                       className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
                     >
                       <User size={16} className="mr-3" />
                       Dashboard
                     </Link>
-                    <Link to="/profile" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                    <Link to="/user/profile" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
                       <Settings size={16} className="mr-3" />
                       Hồ sơ
                     </Link>

@@ -1,12 +1,6 @@
--- ========================================
--- DATABASE SCHEMA FOR IELTS LEARNING PLATFORM
--- ========================================
--- Run this script in Supabase SQL Editor to create tables
-
--- 1. PROFILES TABLE (extends auth.users)
--- ========================================
-CREATE TABLE IF NOT EXISTS profiles (
-    id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+-- Supabase schema removed
+-- This file previously contained Supabase SQL schema. It has been removed
+-- because the project no longer uses Supabase. Restore from backups if needed.
     email TEXT,
     full_name TEXT,
     avatar_url TEXT,

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase, authService, type Profile } from '../services/supabase';
+import { authService, type Profile } from '../services/api';
+import { apiFetch } from '../services/_apiClient';
 import adminMiddleware from '../middleware/adminMiddleware';
 
 // User interface that matches our app needs
@@ -11,30 +12,42 @@ export interface User {
   avatar?: string;
 }
 
-// Helper function to convert Supabase user + profile to our User type
-const convertSupabaseUser = (supabaseUser: any, profile?: Profile | null): User | null => {
-  if (!supabaseUser) return null;
-  
+// Helper to get normalized backend id (accept _id or id)
+const getBackendUserId = (backendUser: any) => {
+  if (!backendUser) return undefined;
+  if (backendUser.id) return String(backendUser.id);
+  if (backendUser._id) return String(backendUser._id);
+  // nested shape (some endpoints wrap user) — try common fields
+  if (backendUser.user && (backendUser.user.id || backendUser.user._id)) return String(backendUser.user.id || backendUser.user._id);
+  return undefined;
+};
+
+// Helper function to convert backend user + profile to our User type
+const convertBackendUser = (backendUser: any, profile?: Profile | null): User | null => {
+  if (!backendUser) return null;
+
+  const normalizedId = getBackendUserId(backendUser);
   // Use middleware to determine role
-  const role = adminMiddleware.getUserRole(supabaseUser.email);
-  
-  console.log('🔄 Converting Supabase user:', {
-    supabaseUserId: supabaseUser.id,
-    email: supabaseUser.email,
+  const role = adminMiddleware.getUserRole(backendUser.email);
+
+  console.log('🔄 Converting backend user:', {
+    userId: normalizedId,
+    email: backendUser.email,
     profile: profile,
     profileRole: profile?.role,
     middlewareRole: role,
     finalRole: role
   });
-  
+
+  // Ưu tiên lấy tên từ user metadata, nếu không có thì lấy từ profile.full_name, cuối cùng là email
   const convertedUser = {
-    id: supabaseUser.id,
-    email: supabaseUser.email,
-    fullName: profile?.full_name || supabaseUser.user_metadata?.full_name || supabaseUser.email,
-    role: role, // Use middleware role instead of profile role
-    avatar: profile?.avatar_url || supabaseUser.user_metadata?.avatar_url,
-  };
-  
+    id: normalizedId || '',
+    email: backendUser.email,
+    fullName: backendUser.user_metadata?.full_name || profile?.full_name || backendUser.email,
+    role: role,
+    avatar: profile?.avatar_url ?? '',
+  } as User;
+
   console.log('✅ Converted user result:', convertedUser);
   return convertedUser;
 };
@@ -77,54 +90,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsLoading(true);
       console.log('🔍 Checking existing session...');
       try {
-        const { data } = await supabase.auth.getSession();
+        const { data } = await authService.getSession();
         if (data.session?.user) {
           console.log('👤 Found existing session for:', data.session.user.email);
-          
-          // QUICK FIX: Skip profile query on startup too
           console.log('🔍 Trying to fetch profile for role...');
-          
+
           try {
-            // Try to fetch profile with timeout
-            const profilePromise = supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', data.session.user.id)
-              .single();
-            
-            console.log('📊 Profile query created, waiting for response...');
-            
+            const backendId = getBackendUserId(data.session.user);
+            console.debug('checkSession: backendId=', backendId);
+            const profilePromise = apiFetch(`/profiles/${backendId}`);
             const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Profile query timeout')), 2000) // Reduced to 2s
+              setTimeout(() => reject(new Error('Profile query timeout')), 2000)
             );
-            
-            const { data: profile, error } = await Promise.race([
-              profilePromise,
-              timeoutPromise
-            ]) as any;
-          
-            console.log('📋 Profile query result:', { 
-              profile, 
-              error,
-              hasProfile: !!profile,
-              profileRole: profile?.role 
-            });
-          
-            if (error) {
+
+            const { data: profile, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
+
+              if (error) {
               console.error('❌ Profile fetch error on startup:', error);
-              // Use basic user without profile
-              const basicUser = convertSupabaseUser(data.session.user, null);
+              const basicUser = convertBackendUser(data.session.user, null);
               setUser(basicUser);
               console.log('⚠️ Using basic user without profile on startup');
-            } else {
+              } else {
               console.log('✅ Profile loaded on startup:', profile);
-              const convertedUser = convertSupabaseUser(data.session.user, profile);
+              const convertedUser = convertBackendUser(data.session.user, profile);
               setUser(convertedUser);
             }
           } catch (error) {
             console.error('❌ Profile query timeout on startup:', error);
-            // Fallback to basic user
-            const basicUser = convertSupabaseUser(data.session.user, null);
+            const basicUser = convertBackendUser(data.session.user, null);
             setUser(basicUser);
             console.log('⚠️ Timeout fallback: Using basic user');
           }
@@ -149,71 +142,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       clearTimeout(timeoutId);
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('🔐 Auth state changed:', event, session?.user?.email);
-        
-        if (session?.user) {
-          console.log('👤 User signed in:', session.user.email);
-          
-          console.log('🔍 Trying to fetch profile for role...');
-          
-          try {
-            console.log('👤 Fetching user profile...');
-            
-            // Debug: Test simple query first
-            console.log('🔍 Testing auth.uid():', session.user.id);
-            
-            // Add timeout to prevent hanging
-            const profilePromise = supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
-              
-            const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Profile query timeout')), 2000)
-            );
-            
-            const { data: profile, error } = await Promise.race([
-              profilePromise,
-              timeoutPromise
-            ]) as any;
-            
-            console.log('📊 Raw profile query result:', { profile, error });
-            
-            if (error) {
-              console.error('❌ Profile fetch error:', error);
-              
-              // Create user without profile for now
-              const basicUser = convertSupabaseUser(session.user, null);
-              setUser(basicUser);
-              console.log('⚠️ Using basic user without profile');
-              
-            } else {
-              console.log('✅ Profile found:', profile);
-              const convertedUser = convertSupabaseUser(session.user, profile);
-              setUser(convertedUser);
+  // Listen for auth changes. With our REST backend we'll rely on cookie/session persistence
+  // and manual refreshes. For development, poll session periodically to detect changes.
+    let polling = true;
+    const pollInterval = 5000; // 5s
+    const poll = async () => {
+      while (polling) {
+        try {
+          const { data: sessionData } = await authService.getSession();
+          const session = sessionData?.session;
+          if (session?.user) {
+            // fetch profile
+            try {
+              const backendId = getBackendUserId(session.user);
+              const { data: profile, error } = await apiFetch(`/profiles/${backendId}`);
+                if (!error) {
+                const convertedUser = convertBackendUser(session.user, profile);
+                setUser(convertedUser);
+              } else {
+                const basicUser = convertBackendUser(session.user, null);
+                setUser(basicUser);
+              }
+            } catch (err) {
+                const basicUser = convertBackendUser(session.user, null);
+                setUser(basicUser);
             }
-          } catch (err) {
-            console.error('❌ Unexpected error:', err);
-            // Fallback: create user without profile
-            const basicUser = convertSupabaseUser(session.user, null);
-            setUser(basicUser);
-            console.log('⚠️ Fallback: Using basic user due to error');
+          } else {
+            setUser(null);
           }
-        } else {
-          console.log('🚪 User signed out');
-          setUser(null);
+        } catch (err) {
+          // ignore poll errors
         }
-        console.log('⏹️ Setting loading to false');
-        setIsLoading(false);
+        await new Promise(r => setTimeout(r, pollInterval));
       }
-    );
+    };
+    poll();
 
     return () => {
-      subscription.unsubscribe();
+      polling = false;
       clearTimeout(timeoutId);
     };
   }, []);
@@ -222,14 +188,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
       const result = await authService.signIn(email, password);
-      
       if (result.data?.user) {
-        // Profile is included in our custom response
         const profile = (result.data as any).profile;
-        const convertedUser = convertSupabaseUser(result.data.user, profile);
+        const convertedUser = convertBackendUser(result.data.user, profile);
         setUser(convertedUser);
       }
-      
       setIsLoading(false);
       return result;
     } catch (error) {
@@ -270,16 +233,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const result = await authService.updateProfile(updates);
       
       if (result.data) {
-        // Refresh user data
-        const { data } = await supabase.auth.getUser();
-        if (data.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', data.user.id)
-            .single();
-            
-          const convertedUser = convertSupabaseUser(data.user, profile);
+        // Refresh user data from our backend
+        const { data: sessionData } = await authService.getSession();
+        if (sessionData?.session?.user) {
+          const { data: profile } = await apiFetch(`/profiles/${sessionData.session.user.id}`) as any;
+          const convertedUser = convertBackendUser(sessionData.session.user, profile);
           setUser(convertedUser);
         }
       }
@@ -316,31 +274,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     setIsRefreshing(true);
     try {
-      const { data } = await supabase.auth.getSession();
+      const { data } = await authService.getSession();
       if (!data.session?.user) {
         setUser(null);
         return;
       }
 
       console.log('🔄 Refreshing user data...');
-      
-      // Fetch fresh profile data
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', data.session.user.id)
-        .single();
+      const backendId = getBackendUserId(data.session.user);
+      const { data: profile, error } = await apiFetch(`/profiles/${backendId}`) as any;
 
-      if (error) {
-        console.error('❌ Error refreshing profile:', error);
-        // Keep existing user data
-        return;
+      if (!error) {
+        const convertedUser = convertBackendUser(data.session.user, profile);
+        setUser(convertedUser);
+        console.log('✅ Profile refreshed:', profile);
       }
-
-      console.log('✅ Profile refreshed:', profile);
-      const updatedUser = convertSupabaseUser(data.session.user, profile);
-      setUser(updatedUser);
-      console.log('🎯 User role updated to:', updatedUser?.role);
     } catch (error) {
       console.error('❌ Error refreshing user:', error);
     } finally {

@@ -1,186 +1,107 @@
-import { createClient } from '@supabase/supabase-js';
+// Lightweight REST API client to replace Supabase in the frontend.
+// The app will call a backend server (Express + MongoDB) that exposes
+// compatible endpoints. Set VITE_API_URL in your environment (default http://localhost:4000).
 
-// Supabase configuration
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(`
-🚨 Missing Supabase environment variables!
+export const isApiAvailable = !!API_URL;
 
-Please create a .env.local file in your project root with:
-
-VITE_SUPABASE_URL=https://your-project-id.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key-here
-
-See SUPABASE_SETUP.md for complete setup instructions.
-  `);
-}
-
-// Create Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// Database types
 export interface Profile {
   id: string;
   email: string;
-  full_name: string | null;
-  avatar_url: string | null;
-  role: 'user' | 'admin';
-  created_at: string;
-  updated_at: string;
+  full_name?: string | null;
+  avatar_url?: string | null;
+  role?: 'user' | 'admin';
+  created_at?: string;
+  updated_at?: string;
 }
 
-// Authentication Service
+async function apiFetch(path: string, options: RequestInit = {}) {
+  const url = `${API_URL}${path}`;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...((options && options.headers) as Record<string, string> || {}),
+  };
+
+  const res = await fetch(url, { ...options, headers, credentials: 'include' });
+  const text = await res.text();
+  let data;
+  try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+  if (!res.ok) {
+    return { data: null, error: { message: (data && data.message) || res.statusText } };
+  }
+  return { data, error: null };
+}
+
 export const authService = {
-  // Sign in with email and password
   async signIn(email: string, password: string) {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      return await apiFetch('/auth/signin', {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
       });
-
-      if (error) {
-        return { data: null, error: { message: error.message } };
-      }
-
-      // Get user profile
-      if (data.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-
-        return {
-          data: {
-            user: data.user,
-            session: data.session,
-            profile,
-          },
-          error: null,
-        };
-      }
-
-      return { data, error: null };
-    } catch (error) {
-      return {
-        data: null,
-        error: { message: 'Đã xảy ra lỗi khi đăng nhập' },
-      };
+    } catch (err) {
+      return { data: null, error: { message: 'Đã xảy ra lỗi khi đăng nhập' } };
     }
   },
 
-  // Sign up with email and password
   async signUp(email: string, password: string, userData: { fullName: string }) {
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: userData.fullName,
-          },
-        },
+      return await apiFetch('/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, userData })
       });
-
-      if (error) {
-        return { data: null, error: { message: error.message } };
-      }
-
-      return { data, error: null };
-    } catch (error) {
-      return {
-        data: null,
-        error: { message: 'Đã xảy ra lỗi khi đăng ký' },
-      };
+    } catch (err) {
+      return { data: null, error: { message: 'Đã xảy ra lỗi khi đăng ký' } };
     }
   },
 
-  // Sign out
   async signOut() {
-    const { error } = await supabase.auth.signOut();
-    return { error };
+    try {
+      return await apiFetch('/auth/signout', { method: 'POST' });
+    } catch (err) {
+      return { data: null, error: { message: 'Đăng xuất thất bại' } };
+    }
   },
 
-  // Get current session
   async getSession() {
-    return await supabase.auth.getSession();
+    try {
+      return await apiFetch('/auth/session');
+    } catch (err) {
+      return { data: { session: null } };
+    }
   },
 
-  // Reset password - send email
   async resetPassword(email: string) {
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      return await apiFetch('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ email })
       });
-
-      if (error) {
-        return { data: null, error: { message: error.message } };
-      }
-
-      return { 
-        data: { message: 'Email khôi phục mật khẩu đã được gửi!' }, 
-        error: null 
-      };
-    } catch (error) {
-      return {
-        data: null,
-        error: { message: 'Đã xảy ra lỗi khi gửi email khôi phục' },
-      };
+    } catch (err) {
+      return { data: null, error: { message: 'Đã xảy ra lỗi khi gửi email khôi phục' } };
     }
   },
 
-  // Update password (after reset)
   async updatePassword(newPassword: string) {
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
+      return await apiFetch('/auth/update-password', {
+        method: 'POST',
+        body: JSON.stringify({ newPassword })
       });
-
-      if (error) {
-        return { data: null, error: { message: error.message } };
-      }
-
-      return { 
-        data: { message: 'Mật khẩu đã được cập nhật thành công!' }, 
-        error: null 
-      };
-    } catch (error) {
-      return {
-        data: null,
-        error: { message: 'Đã xảy ra lỗi khi cập nhật mật khẩu' },
-      };
+    } catch (err) {
+      return { data: null, error: { message: 'Đã xảy ra lỗi khi cập nhật mật khẩu' } };
     }
   },
 
-  // Update user profile
   async updateProfile(updates: Partial<Profile>) {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        return { data: null, error: { message: 'Chưa đăng nhập' } };
-      }
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', user.id)
-        .select()
-        .single();
-
-      if (error) {
-        return { data: null, error: { message: error.message } };
-      }
-
-      return { data, error: null };
-    } catch (error) {
-      return {
-        data: null,
-        error: { message: 'Đã xảy ra lỗi khi cập nhật thông tin' },
-      };
+      return await apiFetch('/profiles/me', {
+        method: 'PUT',
+        body: JSON.stringify(updates)
+      });
+    } catch (err) {
+      return { data: null, error: { message: 'Đã xảy ra lỗi khi cập nhật thông tin' } };
     }
-  },
+  }
 };
