@@ -15,6 +15,8 @@ import WritingPractice from '../pages/user/WritingPractice';
 import WritingHistory from '../pages/user/WritingHistory';
 import ProtectedRoute from '../components/common/ProtectedRoute';
 import NotFoundPage from '../pages/NotFoundPage';
+import ExamDetail from '../pages/ExamDetail';
+import TakeExam from '../pages/TakeExam';
 import { ConfirmReset } from '../components/ui/ResetPassword';
 
 const router = createBrowserRouter([
@@ -124,6 +126,14 @@ const router = createBrowserRouter([
         <UserLayout><ProfilePage /></UserLayout>
       </ProtectedRoute>
     ),
+  },
+  {
+    path: '/exams/:id',
+    element: <Layout><ExamDetail /></Layout>,
+  },
+  {
+    path: '/exams/:id/take/:attemptId',
+    element: <Layout><TakeExam /></Layout>,
   },
   {
     path: '*',

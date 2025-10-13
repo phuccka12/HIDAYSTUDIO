@@ -42,11 +42,52 @@ export interface Test {
 
 export interface Question {
   id: string;
-  type: 'multiple-choice' | 'essay' | 'audio-response' | 'fill-blank';
-  content: string;
-  options?: string[]; // for multiple choice
-  correctAnswer?: string;
-  points: number;
+  type: 'mcq' | 'multi' | 'essay' | 'audio' | 'fill' | 'true_false' | string;
+  text: string;
+  prompt?: string;
+  choices?: Choice[];
+  points?: number;
+}
+
+export interface Choice {
+  id: string;
+  text: string;
+}
+
+export interface Section {
+  id: string;
+  title?: string;
+  instructions?: string;
+  passage?: string;
+  mediaRefs?: any[];
+  questions: Question[];
+}
+
+export interface Exam {
+  id: string;
+  title: string;
+  description?: string;
+  sections: Section[];
+  settings?: any;
+}
+
+export interface Answer {
+  questionId: string;
+  answer: any;
+}
+
+export interface Attempt {
+  id: string;
+  examId: string;
+  userId?: string;
+  startedAt?: string;
+  expiresAt?: string;
+  status?: 'in_progress' | 'submitted' | 'graded' | 'expired';
+  answers?: Answer[];
+  order?: string[];
+  score?: number;
+  details?: any;
+  exam?: Exam;
 }
 
 export interface TestResult {
@@ -58,13 +99,7 @@ export interface TestResult {
   answers: Answer[];
   completedAt: string;
 }
-
-export interface Answer {
-  questionId: string;
-  userAnswer: string;
-  isCorrect: boolean;
-  points: number;
-}
+// NOTE: a different "result" answer shape (isCorrect/points) can be modeled separately if needed
 
 export interface LearningPath {
   id: string;

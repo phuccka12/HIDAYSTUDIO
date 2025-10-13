@@ -1,4 +1,5 @@
 import apiFetch from './_apiClient';
+import type { Attempt, Answer } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -12,6 +13,11 @@ export async function getExam(slugOrId: string) {
   return apiFetch(`/exams/${encodeURIComponent(slugOrId)}`);
 }
 
+// Start an exam attempt (public)
+export async function startExam(examId: string) {
+  return apiFetch(`/exams/${encodeURIComponent(examId)}/start`, { method: 'POST' });
+}
+
 export async function listLessons(params: Record<string, any> = {}) {
   const qs = new URLSearchParams(params).toString();
   return apiFetch(`/lessons?${qs}`);
@@ -19,6 +25,18 @@ export async function listLessons(params: Record<string, any> = {}) {
 
 export async function getLesson(slugOrId: string) {
   return apiFetch(`/lessons/${encodeURIComponent(slugOrId)}`);
+}
+
+export async function getAttempt(attemptId: string): Promise<{ data?: Attempt | null; error?: any } | any> {
+  return apiFetch(`/attempts/${encodeURIComponent(attemptId)}`);
+}
+
+export async function saveAttempt(examId: string, attemptId: string, answers: Answer[]) {
+  return apiFetch(`/exams/${encodeURIComponent(examId)}/attempts/${encodeURIComponent(attemptId)}/save`, { method: 'POST', body: JSON.stringify({ answers }) });
+}
+
+export async function submitAttempt(examId: string, attemptId: string, answers: Answer[]) {
+  return apiFetch(`/exams/${encodeURIComponent(examId)}/attempts/${encodeURIComponent(attemptId)}/submit`, { method: 'POST', body: JSON.stringify({ answers }) });
 }
 
 // Admin (dashboard)
@@ -88,7 +106,9 @@ export async function uploadFile(file: File) {
 }
 
 export default {
-  listExams, getExam, listLessons, getLesson,
+  listExams, getExam, startExam, listLessons, getLesson, getAttempt,
+  saveAttempt, submitAttempt,
   adminListExams, adminCreateExam, adminUpdateExam, adminDeleteExam, adminPublishExam, adminUnpublishExam,
   adminListLessons, adminCreateLesson, adminUpdateLesson, adminDeleteLesson, adminPublishLesson, adminUnpublishLesson,
+  uploadFile,
 };

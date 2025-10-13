@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import MediaGallery from './MediaGallery';
-import DanhSachCauHoi from './DanhSachCauHoi';
+import ExamBasicInfo from './ExamBasicInfo';
+import ExamSettings from './ExamSettings';
+import ExamSectionsMedia from './ExamSectionsMedia';
 import { adminCreateExam, adminUpdateExam } from '../../services/content';
+import { useToast } from '../ui/Toast';
 
 type Exam = any;
 
@@ -14,177 +16,185 @@ export default function ExamForm({
   onSave: (p: any) => void;
   onCancel: () => void;
 }) {
+  // ---------- state (giữ nguyên dữ liệu & cấu trúc) ----------
   const [title, setTitle] = useState(initial.title || '');
   const [slug, setSlug] = useState(initial.slug || '');
   const [description, setDescription] = useState(initial.description || '');
-  const [sectionsText, setSectionsText] = useState(() => JSON.stringify(initial.sections || [], null, 2));
-  const [gallery, setGallery] = useState<Array<{ url: string; filename?: string }>>(initial.gallery || []);
-  const [error, setError] = useState<string | null>(null);
+  const [sectionsText, setSectionsText] = useState(() =>
+    JSON.stringify(initial.sections || [], null, 2)
+  );
+  const [gallery, setGallery] = useState<Array<{ url: string; filename?: string }>>(
+    (initial as any).gallery || []
+  );
+  // error state removed; use toast for user-visible errors
+  const toast = useToast();
+  const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  const [settings, setSettings] = useState<any>(() => ({
+    timeLimitMinutes: (initial as any)?.settings?.timeLimitMinutes ?? 0,
+    attemptsAllowed: (initial as any)?.settings?.attemptsAllowed ?? 0,
+    randomizeQuestions: (initial as any)?.settings?.randomizeQuestions ?? false,
+    randomizePerSection: (initial as any)?.settings?.randomizePerSection ?? false,
+    // normalize showAnswersAfterSubmit to enum string: 'immediately' | 'after_grading' | 'never'
+    showAnswersAfterSubmit: (() => {
+      const raw = (initial as any)?.settings?.showAnswersAfterSubmit;
+      if (typeof raw === 'string') {
+        const s = raw.toLowerCase().trim();
+        if (['immediately', 'after_grading', 'never'].includes(s)) return s;
+        if (s === 'true') return 'immediately';
+        if (s === 'false') return 'after_grading';
+      }
+      if (typeof raw === 'boolean') return raw ? 'immediately' : 'after_grading';
+      return (initial as any)?.settings?.showAnswersAfterSubmit ?? 'after_grading';
+    })(),
+    passThresholdPercent: (initial as any)?.settings?.passThresholdPercent ?? 60,
+    negativeMarking:
+      (initial as any)?.settings?.negativeMarking ?? { enabled: false, penalty: 0 }
+  }));
+
+  // ---------- helpers ----------
+  const slugify = (s: string) =>
+    String(s)
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9\-]/g, '');
+
+  // ---------- save (giữ nguyên logic, thêm UI error) ----------
   const handleSave = async () => {
     let sections: any[] = [];
     try {
       sections = JSON.parse(sectionsText || '[]');
     } catch (e) {
-      setError('JSON không hợp lệ ở phần "Các phần (JSON)".');
+      toast.push({ type: 'error', message: 'JSON không hợp lệ ở phần "Các phần (JSON)".' });
       return;
     }
-    setError(null);
-    const payload = { title, slug, description, sections, gallery };
+
+    // validate giữ nguyên ý nghĩa
+    if (settings.passThresholdPercent < 0 || settings.passThresholdPercent > 100) {
+      toast.push({ type: 'error', message: 'Pass threshold must be between 0 and 100%.' });
+      return;
+    }
+    if (settings.timeLimitMinutes < 0) {
+      toast.push({ type: 'error', message: 'Time limit must be 0 or positive.' });
+      return;
+    }
+    if (settings.attemptsAllowed < 0) {
+      toast.push({ type: 'error', message: 'Attempts allowed must be 0 (unlimited) or a positive integer.' });
+      return;
+    }
+    // quick frontend mapping to server-expected shapes
+    const mappedSettings = { ...(settings || {}) };
+    if (typeof mappedSettings.showAnswersAfterSubmit === 'boolean') {
+      mappedSettings.showAnswersAfterSubmit = mappedSettings.showAnswersAfterSubmit ? 'immediately' : 'after_grading';
+    }
+    // support frontend negativeMarking.penalty -> server negativeMarking.perWrong
+    if (mappedSettings.negativeMarking && typeof mappedSettings.negativeMarking === 'object') {
+      const nm = { ...(mappedSettings.negativeMarking) };
+      if (typeof nm.penalty !== 'undefined' && typeof nm.perWrong === 'undefined') nm.perWrong = Number(nm.penalty);
+      mappedSettings.negativeMarking = nm;
+    }
+
+    const payload = { title, slug, description, sections, gallery, settings: mappedSettings };
+
+    setSaving(true);
     try {
+      let res: any;
       if (initial && (initial as any)._id) {
-        const { data } = await adminUpdateExam((initial as any)._id, payload) as any;
-        // expect server { ok: true, exam }
-        onSave(data?.exam || data || payload);
+        res = await adminUpdateExam((initial as any)._id, payload);
       } else {
-        const { data } = await adminCreateExam(payload) as any;
-        onSave(data?.exam || data || payload);
+        res = await adminCreateExam(payload);
       }
+      // apiFetch returns { data, error }
+      if (res && res.error) {
+        const msg = res.error.message || 'Lỗi khi lưu đề thi';
+        // parse field errors if provided by API
+        if (res.error.fields && typeof res.error.fields === 'object') {
+          const fe: Record<string, string> = {};
+          for (const k of Object.keys(res.error.fields)) {
+            fe[k] = String((res.error.fields as any)[k]);
+          }
+          setFieldErrors(fe);
+        }
+        toast.push({ type: 'error', message: String(msg) });
+        setSaving(false);
+        return;
+      }
+  const data = res.data || res;
+  // clear field errors on success
+  setFieldErrors({});
+  onSave(data?.exam || data || payload);
+      toast.push({ type: 'success', message: initial && (initial as any)._id ? 'Cập nhật đề thi thành công' : 'Tạo đề thi thành công' });
     } catch (e) {
       console.error('save exam error', e);
-      onSave(payload);
+      const msg = (e && (e as any).message) || 'Lỗi khi lưu đề thi';
+      toast.push({ type: 'error', message: String(msg) });
+    } finally {
+      setSaving(false);
     }
   };
 
+  // ---------- UI ----------
   return (
     <div className="space-y-6">
-      {/* Basic Info */}
-      <div className="rounded-xl border border-gray-200 bg-white">
-        <div className="border-b px-4 py-3">
-          <h4 className="text-sm font-semibold text-gray-800">Thông tin cơ bản</h4>
+      <ExamBasicInfo
+        title={title}
+        setTitle={setTitle}
+        slug={slug}
+        setSlug={setSlug}
+        description={description}
+        setDescription={setDescription}
+        slugify={slugify}
+      />
+
+      <ExamSettings settings={settings} setSettings={setSettings} />
+      {fieldErrors.settings && (
+        <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {fieldErrors.settings}
         </div>
-        <div className="grid gap-4 p-4 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium">Tiêu đề</label>
-            <div className="relative">
-              <input
-                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 pl-10 shadow-sm focus:ring-2 focus:ring-indigo-500"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="VD: IELTS Practice Test 1"
-              />
-            </div>
-          </div>
+      )}
 
-          <div>
-            <label className="mb-1 block text-sm font-medium">Slug (tùy chọn)</label>
-            <div className="relative">
-              <input
-                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 pl-10 shadow-sm focus:ring-2 focus:ring-indigo-500"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="ielts-practice-test-1"
-              />
-            </div>
-            <p className="mt-1 text-xs text-gray-500">Nếu để trống, hệ thống có thể tự sinh từ tiêu đề.</p>
-          </div>
+      <ExamSectionsMedia
+        sectionsText={sectionsText}
+        setSectionsText={setSectionsText}
+        gallery={gallery}
+        setGallery={setGallery}
+        initial={initial}
+      />
 
-          <div>
-            <label className="mb-1 block text-sm font-medium">Mô tả ngắn</label>
-            <input
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm focus:ring-2 focus:ring-indigo-500"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Tóm tắt ngắn cho đề thi…"
-            />
-          </div>
-        </div>
-      </div>
+      {/* `ExamSectionsMedia` component above already renders the sections + media UI. Removed duplicate block. */}
 
-      {/* Sections JSON + Media uploader */}
-      <div className="rounded-xl border border-gray-200 bg-white">
-        <div className="border-b px-4 py-3">
-          <h4 className="text-sm font-semibold text-gray-800">Cấu trúc & Media</h4>
-        </div>
-
-        <div className="grid gap-4 p-4 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium">Các phần (JSON)</label>
-            <textarea
-              className="h-48 w-full rounded-xl border border-gray-200 bg-white p-3 font-mono text-sm shadow-sm focus:ring-2 focus:ring-indigo-500"
-              value={sectionsText}
-              onChange={(e) => setSectionsText(e.target.value)}
-              placeholder='[{"title":"Phần 1","questions":[]}]'
-            />
-            <p className="mt-2 text-xs text-gray-500">Ví dụ: <code className="rounded bg-gray-100 px-1 py-0.5">{`[{"title":"Phần 1","questions":[]}]`}</code></p>
-            {error && (
-              <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-          </div>
-
-          {/* Render QuestionList per section (live editing) */}
-          {(() => {
-            try {
-              const parsed = JSON.parse(sectionsText || '[]');
-              if (Array.isArray(parsed)) {
-                return parsed.map((s: any, idx: number) => (
-                  <div key={s.id || idx} className="md:col-span-2">
-                    <div className="rounded border p-3">
-                      <div className="flex items-center justify-between">
-                        <h5 className="font-semibold">Section: {s.title || `#${idx+1}`}</h5>
-                      </div>
-                      <DanhSachCauHoi
-                        examId={(initial as any)._id || ''}
-                        sectionId={s.id || String(idx)}
-                        questions={s.questions || []}
-                        onChange={(qs) => {
-                          const copy = JSON.parse(sectionsText || '[]');
-                          copy[idx].questions = qs;
-                          setSectionsText(JSON.stringify(copy, null, 2));
-                        }}
-                      />
-                    </div>
-                  </div>
-                ));
-              }
-            } catch (e) {
-              // ignore parse errors here
-            }
-            return null;
-          })()}
-
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium">Tải media (nhiều file)</label>
-            <div className="flex items-center gap-3">
-              <MediaGallery
-                media={gallery}
-                onChange={(m) => setGallery(m)}
-                onInsert={(url) => {
-                  try {
-                    const sections = JSON.parse(sectionsText || '[]');
-                    if (!Array.isArray(sections)) throw new Error('Not array');
-                    if (!sections[0]) sections[0] = { title: 'Media', questions: [], media: [] };
-                    sections[0].media = sections[0].media || [];
-                    sections[0].media.push({ url, type: 'image' });
-                    setSectionsText(JSON.stringify(sections, null, 2));
-                  } catch (err) {
-                    setDescription((d: string) => `${d}\n![](${url})`);
-                  }
-                }}
-              />
-              {/* upload status shown inside MediaGallery */}
-            </div>
-
-            {/* MediaGallery renders thumbnails and insert/copy actions */}
-          </div>
-        </div>
-      </div>
-
-      {/* Actions */}
+      {/* ================== Actions ================== */}
       <div className="flex items-center justify-end gap-2">
-        <button className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 hover:bg-gray-200" onClick={onCancel}>
+        <button
+          className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 hover:bg-gray-200"
+          onClick={onCancel}
+        >
           Hủy
         </button>
         <button
-          className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white shadow hover:bg-indigo-700"
+          className={`inline-flex items-center rounded-lg px-4 py-2 font-medium text-white shadow ${saving ? 'bg-indigo-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}
           onClick={handleSave}
+          disabled={saving}
         >
-          <svg viewBox="0 0 24 24" className="mr-2 size-5" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
-          Lưu
+          {saving ? (
+            <svg className="mr-2 h-4 w-4 animate-spin text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <circle cx="12" cy="12" r="10" strokeWidth="4" className="opacity-25" />
+              <path d="M4 12a8 8 0 018-8" strokeWidth="4" className="opacity-75" />
+            </svg>
+          ) : (
+            <svg
+              viewBox="0 0 24 24"
+              className="mr-2 size-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          )}
+          {saving ? 'Đang lưu...' : 'Lưu'}
         </button>
       </div>
     </div>
