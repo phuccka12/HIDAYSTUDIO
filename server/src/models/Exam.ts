@@ -71,8 +71,18 @@ const ExamSchema = new Schema({
   sections: { type: [SectionSchema], default: [] },
   settings: {
     timeLimitMinutes: { type: Number, min: 0 },
-    attemptsAllowed: { type: Number, default: 1, min: 1 },
+  attemptsAllowed: { type: Number, default: 0, min: 0 },
+    allowRetakeAfterMinutes: { type: Number, min: 0 },
     randomizeQuestions: { type: Boolean, default: false },
+    randomizePerSection: { type: Boolean, default: false },
+    showAnswersAfterSubmit: { type: String, enum: ['immediately','after_grading','never'], default: 'after_grading' },
+    passThresholdPercent: { type: Number, min: 0, max: 100 },
+    negativeMarking: { enabled: { type: Boolean, default: false }, perWrong: { type: Number } },
+    autoGradeTypes: { type: [String], default: ['mcq','true_false','multi'] },
+    shuffleOptions: { type: Boolean, default: false },
+    allowSaveProgress: { type: Boolean, default: false },
+    showTimer: { type: Boolean, default: true },
+    publishState: { type: String, enum: ['draft','published','archived'], default: 'draft' },
     scoring: { type: Map, of: Schema.Types.Mixed, default: {} }
   },
   published: { type: Boolean, default: false },
@@ -89,6 +99,33 @@ ExamSchema.pre('save', function (next) {
       .replace(/\s+/g, '-')
       .replace(/[^a-z0-9\-]/g, '');
     this.slug = s;
+  }
+  next();
+});
+
+// Pre-validate: coerce some frontend-friendly shapes into the schema's expected types
+ExamSchema.pre('validate', function (next) {
+  try {
+    if (this.settings) {
+      // allow frontend to send boolean or string boolean for showAnswersAfterSubmit
+      let sas = (this.settings as any).showAnswersAfterSubmit;
+      if (typeof sas === 'boolean') {
+        (this.settings as any).showAnswersAfterSubmit = sas ? 'immediately' : 'after_grading';
+      } else if (typeof sas === 'string') {
+        const s = sas.toLowerCase().trim();
+        if (s === 'true') (this.settings as any).showAnswersAfterSubmit = 'immediately';
+        else if (s === 'false') (this.settings as any).showAnswersAfterSubmit = 'after_grading';
+        // otherwise, if it's already one of allowed enum strings, leave as-is
+      }
+
+      // map negativeMarking.penalty (frontend) -> negativeMarking.perWrong (schema)
+      const nm = (this.settings as any).negativeMarking;
+      if (nm && typeof nm.penalty !== 'undefined' && typeof nm.perWrong === 'undefined') {
+        (this.settings as any).negativeMarking.perWrong = Number(nm.penalty);
+      }
+    }
+  } catch (err) {
+    // ignore coercion errors, let validation handle real issues
   }
   next();
 });
