@@ -215,9 +215,9 @@ const AdminDashboard: React.FC = () => {
                     <div className="flex items-center">
                       <div className={`w-3 h-3 rounded-full mr-3 ${submission.aiScore ? 'bg-green-500' : 'bg-blue-500'}`}></div>
                       <div>
-                        <p className="font-medium text-gray-800">Writing {submission.taskType.toUpperCase()}{submission.aiScore && (<span className="ml-2 text-sm text-green-600 font-semibold">(Điểm: {submission.aiScore})</span>)}</p>
+                        <p className="font-medium text-gray-800">Writing {(submission.taskType || 'unknown').toUpperCase()}{submission.aiScore && (<span className="ml-2 text-sm text-green-600 font-semibold">(Điểm: {submission.aiScore})</span>)}</p>
                         <p className="text-sm text-gray-500">{submission.userEmail || 'Unknown user'}</p>
-                        <p className="text-xs text-gray-400 mt-1 truncate max-w-md">{submission.content.substring(0, 100)}...</p>
+                        <p className="text-xs text-gray-400 mt-1 truncate max-w-md">{(submission.content || '').substring(0, 100)}...</p>
                       </div>
                     </div>
                     <span className="text-sm text-gray-400">{timeAgo}</span>

@@ -11,6 +11,8 @@ import submissionRoutes from './routes/submissions';
 import adminRoutes from './routes/admin';
 import contentRouter from './routes/content';
 import uploadsRouter from './routes/uploads';
+import llmRouter from './routes/llm';
+import writingRouter from './routes/writing';
 // use require() for path to avoid ESM/CommonJS interop issues when running with ts-node-dev
 const path = require('path');
 
@@ -25,10 +27,12 @@ app.use('/profiles', profileRoutes);
 app.use('/submissions', submissionRoutes);
 app.use('/admin', adminRoutes);
 app.use('/', contentRouter);
+// Expose a simple LLM proxy endpoint at /llm (see server/src/routes/llm.ts)
+app.use('/llm', llmRouter);
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '..', '..', 'uploads')));
 app.use('/', uploadsRouter);
-
+app.use('/writing', writingRouter);
 app.get('/', (_req, res) => res.json({ status: 'ok' }));
 
 // Load environment variables from server/.env when present

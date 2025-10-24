@@ -17,8 +17,10 @@ import ProtectedRoute from '../components/common/ProtectedRoute';
 import NotFoundPage from '../pages/NotFoundPage';
 import ExamDetail from '../pages/ExamDetail';
 import TakeExam from '../pages/TakeExam';
+import LessonDetail from '../pages/LessonDetail';
 import { ConfirmReset } from '../components/ui/ResetPassword';
-
+import PracticeTests from '../pages/user/PracticeTests';
+import Lessons from '../pages/user/Lessons';
 const router = createBrowserRouter([
   {
     path: '/reset-password',
@@ -47,6 +49,14 @@ const router = createBrowserRouter([
       {
         path: 'writing-history',
         element: <WritingHistory />,
+      },
+      {
+        path: 'practice-tests',
+        element: <PracticeTests />,
+      },
+      {
+        path: 'lessons',
+        element: <Lessons />,
       },
       {
         path: 'profile',
@@ -130,6 +140,10 @@ const router = createBrowserRouter([
   {
     path: '/exams/:id',
     element: <Layout><ExamDetail /></Layout>,
+  },
+  {
+    path: '/lessons/:id',
+    element: <Layout><LessonDetail /></Layout>,
   },
   {
     path: '/exams/:id/take/:attemptId',

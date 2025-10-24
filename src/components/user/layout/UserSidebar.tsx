@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, PencilLine, BarChart2, User, Sparkle } from 'lucide-react';
+import { LayoutDashboard, PencilLine, BarChart2, Sparkle, BookOpen, GraduationCap } from 'lucide-react';
 
 const UserSidebar: React.FC = () => {
   return (
@@ -27,8 +27,13 @@ const UserSidebar: React.FC = () => {
           </Link>
         </li>
         <li>
-          <Link to="/user/profile" className="flex items-center gap-3 py-3 px-4 rounded-xl hover:bg-pink-50 transition-colors text-pink-700">
-            <User className="w-6 h-6 text-pink-600" /> Profile
+          <Link to="/user/practice-tests" className="flex items-center gap-3 py-3 px-4 rounded-xl hover:bg-indigo-50 transition-colors text-indigo-700">
+            <BookOpen className="w-6 h-6 text-indigo-600" /> Thi thử
+          </Link>
+        </li>
+        <li>
+          <Link to="/user/lessons" className="flex items-center gap-3 py-3 px-4 rounded-xl hover:bg-teal-50 transition-colors text-teal-700">
+            <GraduationCap className="w-6 h-6 text-teal-600" /> Bài học
           </Link>
         </li>
       </ul>

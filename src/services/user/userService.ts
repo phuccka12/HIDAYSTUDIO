@@ -19,7 +19,6 @@ export interface UserProgressItem {
   created_at: string;
 }
 
-// Real backend queries - no mock data
 export const userService = {
   async getUserProfile(userId: string): Promise<UserProfile | null> {
     const { data, error } = await apiFetch(`/profiles/${userId}`);
@@ -29,8 +28,7 @@ export const userService = {
     }
     return data as UserProfile;
   },
-
-  async getUserProgress(userId: string): Promise<UserProgressItem[]> {
+async getUserProgress(userId: string): Promise<UserProgressItem[]> {
     const { data, error } = await apiFetch(`/users/${userId}/progress`);
     if (error) {
       console.error('Error fetching user progress:', error);
@@ -38,17 +36,15 @@ export const userService = {
     }
     return data as UserProgressItem[];
   },
-
-  async getUserSubmissions(userId: string, limit = 10): Promise<WritingSubmission[]> {
-    const { data, error } = await apiFetch(`/users/${userId}/submissions?limit=${limit}`);
+ async getUserSubmissions(userId: string, limit = 10): Promise<WritingSubmission[]> {
+    const { data, error } = await apiFetch(`/submissions?user_id=${encodeURIComponent(userId)}&limit=${limit}`);
     if (error) {
       console.error('Error fetching user submissions:', error);
       throw error;
     }
     return data as WritingSubmission[];
-  }
-  ,
-  async updateProfile(userId: string, updates: Partial<UserProfile>) {
+  },
+async updateProfile(userId: string, updates: Partial<UserProfile>) {
     const { data, error } = await apiFetch(`/profiles/${userId}`, {
       method: 'PUT',
       body: JSON.stringify(updates)
