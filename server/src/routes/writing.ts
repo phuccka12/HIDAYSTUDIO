@@ -3,10 +3,7 @@ import Prompt from '../models/Prompt';
 
 const router = Router();
 
-/**
- * GET /writing/random?task_type=IELTS_Task2
- * Return one random prompt (fallback to any if none for requested type)
- */
+
 router.get('/random', async (req, res) => {
   try {
     const task_type = String(req.query.task_type || 'IELTS_Task2');

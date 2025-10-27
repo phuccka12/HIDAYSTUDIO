@@ -10,6 +10,7 @@ import profileRoutes from './routes/profiles';
 import submissionRoutes from './routes/submissions';
 import adminRoutes from './routes/admin';
 import contentRouter from './routes/content';
+import usersRouter from './routes/users';
 import uploadsRouter from './routes/uploads';
 import llmRouter from './routes/llm';
 import writingRouter from './routes/writing';
@@ -25,6 +26,7 @@ app.use(cookieParser());
 app.use('/auth', authRoutes);
 app.use('/profiles', profileRoutes);
 app.use('/submissions', submissionRoutes);
+app.use('/users', usersRouter);
 app.use('/admin', adminRoutes);
 app.use('/', contentRouter);
 // Expose a simple LLM proxy endpoint at /llm (see server/src/routes/llm.ts)

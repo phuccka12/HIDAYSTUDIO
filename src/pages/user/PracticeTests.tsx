@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import content from "../../services/content";
 import { useToast } from "../../components/ui/Toast";
 
-// --------- Small primitives ---------
 function Badge({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
@@ -157,7 +156,6 @@ export default function PracticeTests() {
     );
   };
 
-  // --------- Render ---------
   if (loading) {
     return (
       <div className="p-6">

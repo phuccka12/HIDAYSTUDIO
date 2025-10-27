@@ -124,12 +124,6 @@ const AdminDashboard: React.FC = () => {
                 </button>
               </Link>
 
-              <Link to="/admin/users/roles" className="w-full block">
-                <button className="w-full bg-purple-600 text-white py-3 px-4 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-between">
-                  <span className="flex items-center"><UserCog className="w-5 h-5 mr-2" />Phân quyền & vai trò</span>
-                  <span>→</span>
-                </button>
-              </Link>
 
               <Link to="/admin/users/status" className="w-full block">
                 <button className="w-full bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-between">
@@ -138,12 +132,7 @@ const AdminDashboard: React.FC = () => {
                 </button>
               </Link>
 
-              <Link to="/admin/users/remove" className="w-full block">
-                <button className="w-full bg-gray-700 text-white py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-between">
-                  <span className="flex items-center"><UserMinus className="w-5 h-5 mr-2" />Xóa / vô hiệu hóa</span>
-                  <span>→</span>
-                </button>
-              </Link>
+             
             </div>
           </div>
 
@@ -185,12 +174,7 @@ const AdminDashboard: React.FC = () => {
               <Settings className="w-6 h-6 mr-2 text-purple-600" />
               Cài đặt hệ thống
             </h2>
-            <div className="space-y-4">
-              <button className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors text-left">🔧 Cấu hình chung</button>
-              <button className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors text-left">🔐 Bảo mật & quyền</button>
-              <button className="w-full bg-purple-600 text-white py-3 px-4 rounded-lg hover:bg-purple-700 transition-colors text-left">🔄 Backup & restore</button>
-              <button className="w-full bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 transition-colors text-left">🚨 Logs & monitoring</button>
-            </div>
+            
           </div>
         </div>
 

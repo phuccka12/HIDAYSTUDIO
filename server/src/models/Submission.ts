@@ -1,3 +1,4 @@
+// ...existing code...
 import mongoose from 'mongoose';
 
 const SubmissionSchema = new mongoose.Schema({
@@ -5,9 +6,23 @@ const SubmissionSchema = new mongoose.Schema({
   task_type: { type: String },
   prompt: { type: String },
   content: { type: String },
-  ai_score: { type: Number },
-  ai_feedback: { type: mongoose.Schema.Types.Mixed },
+
+  // AI grading (IELTS bands)
+  ai_score: { type: Number }, // overall band (0-9, can be .5)
+  ai_criteria: {
+    task_response: { type: Number }, // band per criterion
+    coherence: { type: Number },
+    lexical: { type: Number },
+    grammar: { type: Number }
+  },
+  ai_feedback: { type: [String], default: [] }, // bullet feedback
+  ai_corrections: { type: String }, // optional suggested corrections/rewrite
+  ai_raw: { type: mongoose.Schema.Types.Mixed }, // raw LLM output for audit
+  graded_by: { type: String }, // e.g. 'claude-sonnet-4.5'
+  graded_at: { type: Date },
+
   created_at: { type: Date, default: Date.now }
 });
 
 export default mongoose.model('Submission', SubmissionSchema);
+// ...existing code...

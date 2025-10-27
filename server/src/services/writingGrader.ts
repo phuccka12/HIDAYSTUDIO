@@ -76,7 +76,7 @@ export async function gradeWriting(taskPrompt: string, userAnswer: string): Prom
   const prompt = buildPrompt(taskPrompt ?? '', userAnswer ?? '');
 
   // Gọi LLM (wrapper trả về { text, raw })
-const model = process.env.GEMINI_MODEL || 'gemini-pro';
+const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
   const maxTokens = Number(process.env.GEMINI_MAX_TOKENS || 60000);
 
   const { text: rawText, raw } = await callLLMForText(prompt)
