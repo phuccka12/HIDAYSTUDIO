@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { userService } from '../../services/user/userService';
 import { useAuth } from '../../contexts/AuthContext';
 import { isApiAvailable, authService } from '../../services/api';
 import { User, Mail, Lock, Camera, Save, Shield } from 'lucide-react';
@@ -16,6 +15,13 @@ const ProfilePage: React.FC = () => {
     newPassword: '',
     confirmPassword: '',
   });
+
+  const getErrorMessage = (e: unknown) => {
+    if (!e) return '';
+    if (typeof e === 'string') return e;
+  if (typeof e === 'object' && e !== null && 'message' in e) return String((e as { message?: unknown }).message);
+    return JSON.stringify(e);
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -34,12 +40,12 @@ const ProfilePage: React.FC = () => {
       // Trim full name to avoid trailing spaces
       const trimmedName = formData.fullName?.trim();
 
-      // Update profiles table
+      // Update profiles via authenticated endpoint (/profiles/me)
       try {
-        await userService.updateProfile(user.id, { full_name: trimmedName });
-      } catch (err: any) {
-        console.error('userService.updateProfile error:', err);
-        setStatusMessage(`Lỗi khi cập nhật profiles table: ${err.message || JSON.stringify(err)}`);
+        await authService.updateProfile({ full_name: trimmedName });
+      } catch (err: unknown) {
+        console.error('authService.updateProfile error:', err);
+        setStatusMessage(`Lỗi khi cập nhật hồ sơ: ${getErrorMessage(err)}`);
         return;
       }
 
@@ -63,9 +69,9 @@ const ProfilePage: React.FC = () => {
       }
       await refreshUser();
       setIsEditing(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Unexpected error updating profile:', error);
-      setStatusMessage(`Không thể cập nhật hồ sơ. Chi tiết: ${error?.message || JSON.stringify(error)}`);
+      setStatusMessage(`Không thể cập nhật hồ sơ. Chi tiết: ${getErrorMessage(error)}`);
     } finally {
       setIsSaving(false);
     }

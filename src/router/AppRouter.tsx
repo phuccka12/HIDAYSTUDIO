@@ -9,7 +9,7 @@ import AdminUserCreate from '../pages/admin/users/AdminUserCreate';
 import AdminUserEdit from '../pages/admin/users/AdminUserEdit';
 import ExamsList from '../pages/admin/content/ExamsList';
 import LessonsList from '../pages/admin/content/LessonsList';
-import ProfilePage from '../pages/ProfilePage';
+import UserProfilePage from '../pages/user/Profile';
 import UserLayout from '../components/user/layout/UserLayout';
 import WritingPractice from '../pages/user/WritingPractice';
 import WritingHistory from '../pages/user/WritingHistory';
@@ -60,7 +60,7 @@ const router = createBrowserRouter([
       },
       {
         path: 'profile',
-        element: <ProfilePage />,
+        element: <UserProfilePage />,
       },
     ],
   },
@@ -133,7 +133,7 @@ const router = createBrowserRouter([
     path: '/profile',
     element: (
       <ProtectedRoute requiredRole="user">
-        <UserLayout><ProfilePage /></UserLayout>
+        <UserLayout><UserProfilePage /></UserLayout>
       </ProtectedRoute>
     ),
   },

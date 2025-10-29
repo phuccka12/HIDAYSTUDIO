@@ -23,9 +23,6 @@ export default function ExamForm({
   const [sectionsText, setSectionsText] = useState(() =>
     JSON.stringify(initial.sections || [], null, 2)
   );
-  const [gallery, setGallery] = useState<Array<{ url: string; filename?: string }>>(
-    (initial as any).gallery || []
-  );
   // error state removed; use toast for user-visible errors
   const toast = useToast();
   const [saving, setSaving] = useState(false);
@@ -66,9 +63,73 @@ export default function ExamForm({
     let sections: any[] = [];
     try {
       sections = JSON.parse(sectionsText || '[]');
-    } catch (e) {
+    } catch {
       toast.push({ type: 'error', message: 'JSON không hợp lệ ở phần "Các phần (JSON)".' });
       return;
+    }
+
+    // Normalize sections and questions: ensure required ids and types exist so server validation won't fail
+    try {
+      let removedEmptyPrompts = 0;
+      sections = (sections || []).map((s: any, si: number) => {
+        const sec = { ...(s || {}) };
+        if (!sec.id) sec.id = `s_${Date.now()}_${si}`;
+        // validate section type against allowed set, default to 'reading'
+        const allowedSecTypes = ['listening', 'reading', 'writing', 'speaking'];
+        if (!sec.type || !allowedSecTypes.includes(sec.type)) sec.type = 'reading';
+        if (!sec.title) sec.title = sec.title || `Phần ${si + 1}`;
+        sec.questions = Array.isArray(sec.questions)
+          ? (() => {
+              const mapped = sec.questions.map((q: any, qi: number) => {
+                const qq = { ...(q || {}) };
+                if (!qq.id) qq.id = `q_${Date.now()}_${si}_${qi}`;
+                if (!qq.type) qq.type = 'mcq';
+                if (typeof qq.points === 'undefined') qq.points = 1;
+
+                // normalize choices array for question
+                if (!Array.isArray(qq.choices)) qq.choices = [];
+                qq.choices = qq.choices
+                  .map((c: any, ci: number) => ({ id: c?.id || String(Date.now() + ci), text: c?.text || '', isCorrect: !!c?.isCorrect }))
+                  .filter((c: any) => String(c.text || '').trim() !== '');
+
+                // ensure metadata object exists and normalize speaking/listening subkeys
+                if (!qq.metadata || typeof qq.metadata !== 'object') qq.metadata = {};
+                if (!qq.metadata.speaking) qq.metadata.speaking = qq.metadata.speaking || {};
+                if (!qq.metadata.listening) qq.metadata.listening = qq.metadata.listening || {};
+
+                // if listening comprehension uses MCQ/multi stored in metadata, map choices to top-level choices
+                try {
+                  const comp = qq.metadata.listening?.comprehension || {};
+                  if (comp && Array.isArray(comp.choices) && comp.choices.length > 0) {
+                    qq.choices = comp.choices
+                      .map((c: any, ci: number) => ({ id: c?.id || String(Date.now() + ci), text: c?.text || '', isCorrect: !!c?.isCorrect }))
+                      .filter((c: any) => String(c.text || '').trim() !== '');
+                  }
+                } catch {
+                  // ignore malformed metadata, keep qq.choices as-is
+                }
+
+                return qq;
+              });
+              // filter out questions missing a non-empty prompt to avoid mongoose validation errors
+              return mapped.filter((qq: any) => {
+                if (!qq || !qq.prompt || String(qq.prompt).trim() === '') {
+                  removedEmptyPrompts += 1;
+                  return false;
+                }
+                return true;
+              });
+            })()
+          : [];
+        return sec;
+      });
+      if (removedEmptyPrompts > 0) {
+        toast.push({ type: 'warning', message: `Đã loại ${removedEmptyPrompts} câu hỏi trống (không có prompt) khỏi nội dung trước khi lưu.` });
+      }
+      // write back normalized JSON to textarea so admin sees stable ids
+      setSectionsText(JSON.stringify(sections, null, 2));
+    } catch {
+      // ignore normalization errors, proceed with original sections
     }
 
     // validate giữ nguyên ý nghĩa
@@ -96,7 +157,7 @@ export default function ExamForm({
       mappedSettings.negativeMarking = nm;
     }
 
-    const payload = { title, slug, description, sections, gallery, settings: mappedSettings };
+  const payload = { title, slug, description, sections, settings: mappedSettings };
 
     setSaving(true);
     try {
@@ -158,8 +219,6 @@ export default function ExamForm({
       <ExamSectionsMedia
         sectionsText={sectionsText}
         setSectionsText={setSectionsText}
-        gallery={gallery}
-        setGallery={setGallery}
         initial={initial}
       />
 

@@ -1,14 +1,27 @@
 import { useState, useEffect } from 'react';
 import Modal from '../ui/Modal';
-import MediaGallery from './MediaGallery';
+import SpeakingQuestionForm from './SpeakingQuestionForm';
+import ListeningQuestionForm from './ListeningQuestionForm';
 
 type Choice = { id: string; text: string; isCorrect?: boolean };
+
+type SpeakingMeta = { allowRecording?: boolean; maxDurationSeconds?: number; audioExampleUrl?: string; rubric?: string; autoGrade?: boolean };
+type ListeningMeta = { audioUrl?: string; transcript?: string; comprehension?: { type?: 'mcq'|'short'|'fill'; choices?: Choice[]; shuffleChoices?: boolean; correctAnswer?: string | string[] } };
+
+type QuestionPayload = {
+  id?: string;
+  type: string;
+  prompt: string;
+  choices?: Choice[];
+  points?: number;
+  metadata?: Record<string, unknown>;
+};
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  onSave: (q: any) => void;
-  initial?: any;
+  onSave: (q: QuestionPayload) => void;
+  initial?: QuestionPayload | undefined;
 };
 
 export default function QuestionForm({ open, onClose, onSave, initial }: Props) {
@@ -18,17 +31,21 @@ export default function QuestionForm({ open, onClose, onSave, initial }: Props) 
     initial?.choices || [{ id: 'a', text: '', isCorrect: false }, { id: 'b', text: '', isCorrect: false }]
   );
   const [points, setPoints] = useState(initial?.points || 1);
-  const [media, setMedia] = useState(initial?.media || []);
+  const [speakingMeta, setSpeakingMeta] = useState<SpeakingMeta>(initial?.metadata?.speaking || {});
+  const [listeningMeta, setListeningMeta] = useState<ListeningMeta>(initial?.metadata?.listening || {});
+  // media disabled: not tracking media attachments for questions
 
   // When the modal opens, refresh internal state from `initial` prop.
   useEffect(() => {
     if (!open) return;
     setType(initial?.type || 'mcq');
     setPrompt(initial?.prompt || '');
-    setPoints(initial?.points ?? 1);
-    setMedia(initial?.media || []);
+  setPoints(initial?.points ?? 1);
+  const initMeta = (initial?.metadata as unknown) as Record<string, unknown> | undefined;
+  setSpeakingMeta((initMeta?.speaking as SpeakingMeta) || {});
+  setListeningMeta((initMeta?.listening as ListeningMeta) || {});
     if (initial?.choices && Array.isArray(initial.choices) && initial.choices.length > 0) {
-      setChoices(initial.choices.map((c: any, i: number) => ({ id: c.id || String(Date.now() + i), text: c.text || '', isCorrect: !!c.isCorrect })));
+      setChoices(initial.choices.map((c: Choice, i: number) => ({ id: c.id || String(Date.now() + i), text: c.text || '', isCorrect: !!c.isCorrect })));
     } else {
       setChoices([{ id: 'a', text: '', isCorrect: false }, { id: 'b', text: '', isCorrect: false }]);
     }
@@ -46,7 +63,54 @@ export default function QuestionForm({ open, onClose, onSave, initial }: Props) 
     setChoices((list) => list.filter((_, i) => i !== idx));
   }
   function handleSave() {
-    const payload: any = { type, prompt, choices, points, media };
+    // normalize payload: remove empty choices, ensure choice ids, metadata shapes
+    const cleaned = (choices || []).filter((c) => String(c.text || '').trim() !== '');
+    const normChoices: Choice[] = cleaned.map((c) => ({ id: c.id || String(Date.now() + Math.floor(Math.random()*10000)), text: c.text || '', isCorrect: !!c.isCorrect }));
+    // for MCQ, require at least one non-empty choice
+    if (type === 'mcq' && normChoices.length === 0) {
+      // lightweight client-side guard
+      window.alert('Vui lòng thêm ít nhất một lựa chọn hợp lệ cho câu hỏi trắc nghiệm.');
+      return;
+    }
+    const payload: QuestionPayload = { type, prompt, choices: normChoices, points };
+    // include metadata for speaking/listening questions
+    if (type === 'speaking') {
+      payload.metadata = { ...(initial?.metadata || {}), speaking: speakingMeta || {} };
+      // include speaking sample media (audio + image) so they are reliably persisted and served
+      try {
+        const media: any[] = [];
+        const sampleAudio = (speakingMeta as any)?.audioExampleUrl;
+        const sampleImage = (speakingMeta as any)?.imageUrl;
+        if (sampleAudio) media.push({ url: sampleAudio, type: 'audio' });
+        if (sampleImage) media.push({ url: sampleImage, type: 'image' });
+        if (media.length > 0) (payload as any).media = media;
+      } catch {
+        // ignore
+      }
+    } else if (type === 'listening') {
+  payload.metadata = { ...((initial?.metadata as Record<string, unknown>) || {}), listening: listeningMeta || {} };
+      // if listening uses MCQ/multi comprehension, also expose top-level choices so UI/server logic that expects choices still works
+      const comp = listeningMeta?.comprehension || {};
+      if (comp.type === 'mcq') {
+        const valid = (comp.choices || []).filter((c) => String(c.text || '').trim() !== '');
+        payload.choices = valid.map((c) => ({ id: c.id || String(Date.now() + Math.floor(Math.random()*10000)), text: c.text || '', isCorrect: !!c.isCorrect }));
+        if (payload.choices.length === 0) {
+          window.alert('Vui lòng thêm ít nhất một lựa chọn hợp lệ cho câu hỏi nghe (MCQ).');
+          return;
+        }
+      }
+      // also include audio as a media entry so it's more reliably persisted/served
+      try {
+        const audioUrl = listeningMeta?.audioUrl;
+        if (audioUrl) {
+          (payload as any).media = [{ url: audioUrl, type: 'audio' }];
+        }
+      } catch {
+        // ignore
+      }
+    } else if (initial?.metadata) {
+      payload.metadata = initial.metadata as Record<string, unknown>;
+    }
     if (initial && initial.id) payload.id = initial.id;
     onSave(payload);
     onClose();
@@ -74,6 +138,8 @@ export default function QuestionForm({ open, onClose, onSave, initial }: Props) 
                   <option value="mcq">Trắc nghiệm (chọn 1)</option>
                   <option value="multi">Trắc nghiệm (chọn nhiều)</option>
                   <option value="essay">Tự luận</option>
+                  <option value="speaking">Speaking</option>
+                  <option value="listening">Listening</option>
                 </select>
                 <svg
                   className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-gray-400"
@@ -200,18 +266,21 @@ export default function QuestionForm({ open, onClose, onSave, initial }: Props) 
           </div>
         )}
 
-        {/* Khối: Media */}
-        <div className="rounded-2xl border border-gray-200 bg-white">
-          <div className="border-b px-4 py-3">
-            <h4 className="text-sm font-semibold text-gray-800">Media đính kèm</h4>
+        {/* Khối: Speaking metadata */}
+        {type === 'speaking' && (
+          <div>
+            <SpeakingQuestionForm value={speakingMeta} onChange={setSpeakingMeta} />
           </div>
-          <div className="p-4">
-            <MediaGallery media={media} onChange={setMedia} />
-            <p className="mt-2 text-xs text-gray-500">
-              Hỗ trợ hình ảnh/âm thanh. Media này chỉ gắn với câu hỏi hiện tại.
-            </p>
+        )}
+
+        {/* Khối: Listening metadata */}
+        {type === 'listening' && (
+          <div>
+            <ListeningQuestionForm value={listeningMeta} onChange={setListeningMeta} />
           </div>
-        </div>
+        )}
+
+        {/* Media disabled for questions */}
 
         {/* Actions */}
         <div className="flex justify-end gap-2">

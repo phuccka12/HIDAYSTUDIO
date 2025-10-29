@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import MediaGallery from './MediaGallery';
+// Media disabled per request: do not use MediaGallery
 import { adminCreateLesson, adminUpdateLesson } from '../../services/content';
 
 type Props = {
@@ -13,7 +13,7 @@ export default function LessonForm({ initial = {}, onSave, onCancel }: Props) {
   const [slug, setSlug] = useState<string>(initial.slug || '');
   const [description, setDescription] = useState<string>(initial.description || '');
   const [content, setContent] = useState<string>(initial.content || '');
-  const [media, setMedia] = useState<Array<{ url: string; filename?: string }>>(initial.media || []);
+  // media removed: no longer tracking uploaded files here
   const [published, setPublished] = useState<boolean>(Boolean(initial.published));
   // uploading handled inside MediaGallery
 
@@ -24,7 +24,9 @@ export default function LessonForm({ initial = {}, onSave, onCancel }: Props) {
   // media upload is handled by MediaGallery component
 
   async function handleSave() {
-    const payload = { title: title?.trim(), slug: slug?.trim(), description: description?.trim(), content, media, published };
+    // Strip any image markdown inserted previously (e.g. ![](/uploads/...)) since media is disabled
+    const sanitizedContent = (content || '').replace(/!\[[^\]]*\]\([^\)]+\)/g, '').trim();
+    const payload = { title: title?.trim(), slug: slug?.trim(), description: description?.trim(), content: sanitizedContent, published };
     try {
       if (initial && initial._id) {
         const { data } = await adminUpdateLesson(initial._id, payload) as any;
@@ -92,12 +94,7 @@ export default function LessonForm({ initial = {}, onSave, onCancel }: Props) {
             <textarea className="h-48 w-full rounded-xl border border-gray-200 bg-white p-3 font-mono text-sm shadow-sm focus:ring-2 focus:ring-indigo-500" value={content} onChange={(e) => setContent(e.target.value)} placeholder="## Tiêu đề chính\nNội dung..." />
           </div>
 
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium">Tải media (nhiều file)</label>
-            <div className="flex items-center gap-3">
-              <MediaGallery media={media} onChange={(m) => setMedia(m)} onInsert={(url) => setContent((c: string) => `${c}\n![](${url})`)} />
-            </div>
-          </div>
+          {/* Media disabled: uploads removed per preference */}
         </div>
       </div>
 

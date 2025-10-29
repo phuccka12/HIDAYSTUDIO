@@ -9,6 +9,7 @@ import {
 } from '../../../services/content';
 import Modal from '../../../components/ui/Modal';
 import ExamForm from '../../../components/admin/ExamForm';
+import { useToast } from '../../../components/ui/Toast';
 
 type Exam = any;
 
@@ -19,6 +20,7 @@ export default function ExamsListPage() {
   const [page, _setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Exam | null>(null);
+  const toast = useToast();
 
   async function load() {
     setLoading(true);
@@ -63,9 +65,21 @@ export default function ExamsListPage() {
   }
 
   async function togglePublish(id: string, published: boolean) {
-    if (published) await adminUnpublishExam(id);
-    else await adminPublishExam(id);
-    load();
+    try {
+      const res: any = published ? await adminUnpublishExam(id) : await adminPublishExam(id);
+      // apiFetch returns { data, error }
+      if (res && res.error) {
+        const msg = res.error.message || 'Lỗi khi thay đổi trạng thái xuất bản';
+        toast.push({ type: 'error', message: String(msg) });
+        return;
+      }
+      toast.push({ type: 'success', message: published ? 'Đã hủy xuất bản' : 'Đã xuất bản thành công' });
+      load();
+    } catch (err) {
+      console.error('publish toggle error', err);
+      const msg = (err && (err as any).message) ? (err as any).message : 'Lỗi khi thay đổi trạng thái xuất bản';
+      toast.push({ type: 'error', message: String(msg) });
+    }
   }
 
   return (

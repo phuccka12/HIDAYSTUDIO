@@ -21,7 +21,8 @@ const ChoiceSchema = new Schema({
 // Question schema - embedded, no automatic _id (we use id field)
 const QuestionSchema = new Schema({
   id: { type: String, required: true },
-  type: { type: String, required: true, enum: ['mcq','multi','match','fill','essay'] },
+  // allow question types used across skills, including speaking/listening
+  type: { type: String, required: true, enum: ['mcq','multi','match','fill','essay','speaking','listening'] },
   prompt: { type: String, required: true, trim: true },
   points: { type: Number, default: 1, min: 0 },
   choices: { type: [ChoiceSchema], default: [] },

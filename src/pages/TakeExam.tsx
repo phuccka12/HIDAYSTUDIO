@@ -7,6 +7,34 @@ import type { Attempt, Question } from '../types';
 function QuestionRenderer({ q, value, onChange }: { q: Question | null, value: any, onChange: (v: any) => void }) {
   if (!q) return null;
   const type = (q.type as string) || 'mcq';
+  // helper to find audio url from question (metadata or media)
+  const API_BASE = (import.meta.env.VITE_API_URL as string) || 'http://localhost:4000';
+  const normalizeUrl = (url: string | undefined | null) => {
+    if (!url) return null;
+    try {
+      // if already absolute, use as-is
+      const u = String(url);
+      if (u.startsWith('http://') || u.startsWith('https://')) return u;
+      // if root-relative (starts with /), prefix backend base
+      if (u.startsWith('/')) return `${API_BASE}${u}`;
+      // otherwise, assume relative to backend as well
+      return `${API_BASE}/${u}`;
+    } catch {
+      return null;
+    }
+  };
+
+  const getAudioUrl = (q: any) => {
+    try {
+      const metaUrl = q?.metadata?.listening?.audioUrl || q?.metadata?.listening?.audio || null;
+      if (metaUrl) return normalizeUrl(metaUrl);
+    } catch {}
+    if (Array.isArray(q.media) && q.media.length > 0) {
+      const m = q.media.find((mm: any) => mm && (mm.type === 'audio' || (mm.url && String(mm.url).toLowerCase().endsWith('.mp3'))));
+      if (m && m.url) return normalizeUrl(m.url);
+    }
+    return null;
+  };
   if (type === 'mcq') {
     return (
       <div className="mt-3 space-y-2">
@@ -23,6 +51,76 @@ function QuestionRenderer({ q, value, onChange }: { q: Question | null, value: a
             <span className="text-gray-800">{c.text}</span>
           </label>
         ))}
+      </div>
+    );
+  }
+  if (type === 'listening') {
+    const audioUrl = getAudioUrl(q);
+    const comp = (q.metadata && (q.metadata.listening || q.metadata)) ? (q.metadata.listening || q.metadata).comprehension : undefined;
+    return (
+      <div className="mt-3 space-y-3">
+        {audioUrl && (
+          <div>
+            <audio
+              controls
+              src={audioUrl}
+              className="w-full"
+              preload="metadata"
+              crossOrigin="anonymous"
+              onError={(e) => {
+                console.error('Audio failed to load', e);
+                const a = e.currentTarget as HTMLAudioElement;
+                // networkState/readyState and media error
+                console.error('audio.networkState=', a.networkState, 'readyState=', a.readyState, 'mediaError=', a.error);
+              }}
+              onLoadedMetadata={(e) => {
+                const a = e.currentTarget as HTMLAudioElement;
+                console.debug('audio loaded metadata, duration=', a.duration);
+              }}
+            />
+            <div className="mt-2 text-xs text-gray-500">
+              <span>Source: </span>
+              <a className="text-indigo-600" href={audioUrl} target="_blank" rel="noreferrer">{audioUrl}</a>
+            </div>
+          </div>
+        )}
+        {q.metadata?.listening?.transcript && (
+          <div className="rounded-md bg-gray-50 p-3 text-sm text-gray-700">{q.metadata.listening.transcript}</div>
+        )}
+        {/* comprehension types */}
+        {comp?.type === 'mcq' ? (
+          <div className="space-y-2">
+            {(q.choices || []).map((c: any) => (
+              <label key={c.id} className="flex items-start gap-3 rounded-xl border border-gray-200 p-3 transition hover:border-indigo-300 cursor-pointer">
+                <input
+                  className="mt-1 h-4 w-4 rounded-full border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  type="radio"
+                  name={q.id}
+                  value={c.id}
+                  checked={value == c.id}
+                  onChange={() => onChange(c.id)}
+                />
+                <span className="text-gray-800">{c.text}</span>
+              </label>
+            ))}
+          </div>
+        ) : comp?.type === 'short' ? (
+          <div>
+            <input className="w-full rounded-xl border px-3 py-2" value={value || ''} onChange={(e) => onChange(e.target.value)} />
+          </div>
+        ) : (
+          // fallback to textarea for fill or unspecified
+          <div>
+            <textarea className="w-full rounded-xl border px-3 py-2" rows={4} value={value || ''} onChange={(e) => onChange(e.target.value)} />
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (type === 'speaking') {
+    return (
+      <div className="mt-3">
+        <SpeakingAnswer q={q} value={value} onChange={onChange} />
       </div>
     );
   }
@@ -58,6 +156,138 @@ function QuestionRenderer({ q, value, onChange }: { q: Question | null, value: a
         onChange={(e) => onChange(e.target.value)}
         placeholder="Nhập câu trả lời của bạn…"
       />
+    </div>
+  );
+}
+
+// Speaking helper component: simple recorder + upload fallback
+function SpeakingAnswer({ q, value, onChange }: { q: Question | null, value: any, onChange: (v: any) => void }) {
+  const [recording, setRecording] = useState(false);
+  const [blobUrl, setBlobUrl] = useState<string | null>(value && typeof value === 'string' ? value : null);
+  const [mediaRec, setMediaRec] = useState<MediaRecorder | null>(null);
+  const [chunks, setChunks] = useState<Blob[]>([]);
+
+  async function startRecord() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return alert('Trình duyệt không hỗ trợ ghi âm.');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      setMediaRec(mr);
+      mr.ondataavailable = (e) => setChunks((c) => c.concat(e.data));
+      mr.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const file = new File([blob], `answer-${Date.now()}.webm`, { type: blob.type });
+        // upload
+        const res = await content.uploadFile(file);
+        if (res && res.data && (res.data.url || (res.data as any).url)) {
+          const url = (res.data as any).url || res.data.url;
+          setBlobUrl(url);
+          onChange(url);
+        } else {
+          alert('Upload thất bại');
+        }
+        setChunks([]);
+      };
+      mr.start();
+      setRecording(true);
+    } catch (err) {
+      console.error(err);
+      alert('Không thể truy cập micro');
+    }
+  }
+
+  function stopRecord() {
+    if (mediaRec && mediaRec.state !== 'inactive') mediaRec.stop();
+    setRecording(false);
+  }
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const res = await content.uploadFile(f);
+    if (res && res.data && (res.data.url || (res.data as any).url)) {
+      const url = (res.data as any).url || res.data.url;
+      setBlobUrl(url);
+      onChange(url);
+    } else {
+      alert('Upload thất bại');
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* If the question includes sample audio/image (in metadata or media), show them */}
+      {(() => {
+        try {
+          const API_BASE = (import.meta.env.VITE_API_URL as string) || 'http://localhost:4000';
+          const normalizeUrl = (u: string | undefined | null) => {
+            if (!u) return null;
+            const s = String(u);
+            if (s.startsWith('http://') || s.startsWith('https://')) return s;
+            if (s.startsWith('/')) return `${API_BASE}${s}`;
+            return `${API_BASE}/${s}`;
+          };
+
+          // metadata first
+          const metaAudio = q && (q as any).metadata?.speaking?.audioExampleUrl ? normalizeUrl((q as any).metadata.speaking.audioExampleUrl) : null;
+          const metaImage = q && (q as any).metadata?.speaking?.imageUrl ? normalizeUrl((q as any).metadata.speaking.imageUrl) : null;
+
+          // media fallback
+          let mediaAudio: string | null = null;
+          let mediaImage: string | null = null;
+          if (q && Array.isArray((q as any).media)) {
+            for (const mm of (q as any).media) {
+              if (!mm || !mm.url) continue;
+              const urlStr = String(mm.url || '');
+              if (!mediaAudio && (mm.type === 'audio' || urlStr.toLowerCase().endsWith('.mp3') || urlStr.toLowerCase().endsWith('.webm'))) {
+                mediaAudio = normalizeUrl(urlStr);
+              }
+              if (!mediaImage && (mm.type === 'image' || urlStr.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/))) {
+                mediaImage = normalizeUrl(urlStr);
+              }
+            }
+          }
+
+          const audioSrc = metaAudio || mediaAudio || null;
+          const imageSrc = metaImage || mediaImage || null;
+
+          return (
+            <div>
+              {imageSrc && (
+                <div className="mb-3">
+                  <div className="text-xs text-gray-600 mb-2">Hình ảnh </div>
+                  <img src={imageSrc || undefined} alt="sample" className="w-full max-h-48 object-contain rounded-md border" />
+                </div>
+              )}
+              {audioSrc && (
+                <div>
+                  <div className="text-xs text-gray-600 mb-2">Audio </div>
+                  <audio controls src={audioSrc || undefined} className="w-full" preload="metadata" crossOrigin="anonymous"
+                    onError={(e) => console.error('Audio failed to load', e)}
+                    onLoadedMetadata={(e) => console.debug('audio duration', (e.currentTarget as HTMLAudioElement).duration)}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        } catch {
+          return null;
+        }
+      })()}
+      <div className="flex items-center gap-2">
+        <button className={`rounded-lg px-3 py-1 ${recording ? 'bg-red-600 text-white' : 'bg-indigo-600 text-white'}`} onClick={() => recording ? stopRecord() : startRecord()}>
+          {recording ? 'Dừng' : 'Ghi âm'}
+        </button>
+        <label className="rounded-lg bg-white border px-3 py-1 cursor-pointer">
+          Upload file
+          <input type="file" accept="audio/*" className="hidden" onChange={handleFile} />
+        </label>
+        {blobUrl && <a className="text-sm text-indigo-600" href={blobUrl} target="_blank" rel="noreferrer">Xem file trả lời</a>}
+      </div>
+      <div>
+        <div className="text-xs text-gray-600">Rubric / Hướng dẫn</div>
+        <textarea className="w-full rounded-xl border px-3 py-2 mt-1" rows={3} value={q?.metadata?.speaking?.rubric || ''} readOnly />
+      </div>
     </div>
   );
 }

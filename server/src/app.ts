@@ -27,12 +27,16 @@ app.use('/auth', authRoutes);
 app.use('/profiles', profileRoutes);
 app.use('/submissions', submissionRoutes);
 app.use('/users', usersRouter);
-app.use('/admin', adminRoutes);
+// Mount public/content routes (these include the exams router which registers both public
+// and admin-prefixed exam endpoints such as /admin/exams). Place this before the
+// dedicated admin-only router so those admin exam endpoints are matched correctly.
 app.use('/', contentRouter);
+app.use('/admin', adminRoutes);
 // Expose a simple LLM proxy endpoint at /llm (see server/src/routes/llm.ts)
 app.use('/llm', llmRouter);
 // Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, '..', '..', 'uploads')));
+// Serve uploaded files from the server/uploads directory (uploads are saved to server/uploads)
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 app.use('/', uploadsRouter);
 app.use('/writing', writingRouter);
 app.get('/', (_req, res) => res.json({ status: 'ok' }));

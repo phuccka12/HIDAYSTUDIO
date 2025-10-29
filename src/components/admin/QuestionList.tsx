@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import QuestionForm from './QuestionForm';
+import { apiFetch } from '../../services/_apiClient';
 
 type Props = {
   examId: string;
@@ -18,6 +19,14 @@ export default function QuestionList({ examId, sectionId, questions, onChange }:
   }
 
   function handleSave(payload: any) {
+    // If this exam hasn't been persisted yet (no examId), operate only on local state
+    if (!examId) {
+      // ensure an id exists so the local UI can render/update it reliably
+      if (!payload.id) payload.id = `q_local_${Date.now()}_${Math.floor(Math.random()*10000)}`;
+      onChange([...questions, payload]);
+      return;
+    }
+
     if (payload.id) {
       // update existing (giữ nguyên logic)
       const found = questions.find((q) => q.id === payload.id);
@@ -25,31 +34,27 @@ export default function QuestionList({ examId, sectionId, questions, onChange }:
         const arr = questions.map((q) => (q.id === payload.id ? { ...q, ...payload } : q));
         onChange(arr);
         // persist
-        fetch(`/admin/exams/${examId}/sections/${sectionId}/questions/${payload.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          credentials: 'include'
-        });
+        (async () => {
+          try {
+            await apiFetch(`/admin/exams/${examId}/sections/${sectionId}/questions/${payload.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+          } catch {
+            // ignore
+          }
+        })();
         return;
       }
     }
     // create new (giữ nguyên logic)
-    fetch(`/admin/exams/${examId}/sections/${sectionId}/questions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      credentials: 'include'
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data && data.question) {
-          onChange([...questions, data.question]);
+    (async () => {
+      try {
+        const res = await apiFetch(`/admin/exams/${examId}/sections/${sectionId}/questions`, { method: 'POST', body: JSON.stringify(payload) });
+        if (res && res.data && (res.data as any).question) {
+          onChange([...questions, (res.data as any).question]);
         }
-      })
-      .catch(() => {
-        /* ignore */
-      });
+      } catch {
+        // ignore
+      }
+    })();
   }
 
   const typeBadge = (t: string) => {
