@@ -9,8 +9,6 @@ import {
   Settings,
   Shield,
   Database,
-  UserPlus,
-  Lock,
   ArrowRight,
 } from "lucide-react";
 import { dashboardService } from "../../services/dashboard";
@@ -44,8 +42,8 @@ const AdminDashboard: React.FC = () => {
       try {
         const adminStats = await dashboardService.getAdminStats();
         if (mounted) setStats(adminStats);
-        const submissions = await dashboardService.getRecentSubmissions(5);
-        if (mounted) setRecentSubmissions(submissions || []);
+  const submissions = await dashboardService.getRecentSubmissions(1, 5);
+  if (mounted) setRecentSubmissions(submissions.items || []);
       } catch (e) {
         console.error("Error loading admin data", e);
       } finally {
@@ -179,6 +177,11 @@ const AdminDashboard: React.FC = () => {
               <StatCard icon={FileText} label="Bài writing đã chấm" value={stats.totalSubmissions.toLocaleString()} accent="green" />
               <StatCard icon={BarChart3} label="Người dùng hoạt động" value={stats.activeUsers.toLocaleString()} accent="purple" />
               <StatCard icon={Database} label="Dung lượng DB" value={stats.databaseSize} accent="orange" />
+              {/* Additional stats */}
+              <StatCard icon={FileText} label="Tổng đề thi" value={(stats.totalExams ?? 0).toLocaleString()} accent="blue" />
+              <StatCard icon={BarChart3} label="Tổng lượt làm bài" value={(stats.totalAttempts ?? 0).toLocaleString()} accent="green" />
+              <StatCard icon={Settings} label="Bài chờ chấm" value={(stats.pendingSubmissions ?? 0).toLocaleString()} accent="purple" />
+              <StatCard icon={BarChart3} label="Điểm TB (attempt)" value={stats.avgAttemptScore != null ? Number(stats.avgAttemptScore).toFixed(2) : '-'} accent="orange" />
             </>
           )}
         </div>
@@ -188,12 +191,6 @@ const AdminDashboard: React.FC = () => {
           <Section title="Quản lý người dùng" icon={Users}>
             <ActionLink to="/admin/users" variant="blue">
               <span className="flex items-center gap-2"><Users className="h-4 w-4" /> Danh sách người dùng</span>
-            </ActionLink>
-            <ActionLink to="/admin/users/create" variant="green">
-              <span className="flex items-center gap-2"><UserPlus className="h-4 w-4" /> Thêm người dùng</span>
-            </ActionLink>
-            <ActionLink to="/admin/users/status" variant="orange">
-              <span className="flex items-center gap-2"><Lock className="h-4 w-4" /> Khóa / Mở khóa tài khoản</span>
             </ActionLink>
           </Section>
 
@@ -211,12 +208,6 @@ const AdminDashboard: React.FC = () => {
               <span className="flex items-center gap-2">📊 Báo cáo chi tiết</span>
               <ArrowRight className="h-4 w-4" />
             </Button>
-          </Section>
-
-          <Section title="Cài đặt hệ thống" icon={Settings}>
-            <div className="rounded-xl border border-dashed border-gray-200 p-6 text-sm text-gray-500">
-              Khu vực cài đặt tổng quát, tích hợp và phân quyền (đang cập nhật giao diện). Bạn có thể thêm các mục con ở đây sau.
-            </div>
           </Section>
         </div>
 

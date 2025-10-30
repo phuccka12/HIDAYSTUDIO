@@ -2,6 +2,10 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import User from '../models/User';
 import Submission from '../models/Submission';
+import Exam from '../models/Exam';
+import Attempt from '../models/Attempt';
+import Lesson from '../models/Lesson';
+import { gradeWriting } from '../services/writingGrader';
 
 const router = Router();
 
@@ -35,28 +39,164 @@ const requireAdmin = async (req: any, res: any) => {
   return null;
 };
 
-router.get('/stats', async (_req, res) => {
-  const totalUsers = await User.countDocuments();
-  const totalSubmissions = await Submission.countDocuments();
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const activeUsers = await User.countDocuments({ updated_at: { $gte: thirtyDaysAgo } });
+router.get('/stats', async (req, res) => {
+  // require admin
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
 
-  res.json({ totalUsers, totalSubmissions, activeUsers, databaseSize: 'N/A' });
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // run independent counts/aggregations in parallel
+    const [
+      totalUsers,
+      newUsers7Days,
+      totalSubmissions,
+      pendingSubmissions,
+      totalExams,
+      publishedExams,
+      lessonsCount,
+      totalAttempts,
+      inProgressAttempts,
+      submittedAttempts,
+      activeUsers
+    ] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ created_at: { $gte: sevenDaysAgo } }),
+      Submission.countDocuments(),
+      Submission.countDocuments({ $or: [{ graded_at: { $exists: false } }, { graded_at: null }] }),
+      Exam.countDocuments(),
+      Exam.countDocuments({ published: true }),
+      Lesson.countDocuments(),
+      Attempt.countDocuments(),
+      Attempt.countDocuments({ status: 'in_progress' }),
+      Attempt.countDocuments({ status: 'submitted' }),
+      User.countDocuments({ updated_at: { $gte: thirtyDaysAgo } })
+    ]);
+
+    // averages via aggregation (may return empty result)
+    const avgScoreAgg = await Attempt.aggregate([
+      { $match: { score: { $ne: null } } },
+      { $group: { _id: null, avgScore: { $avg: '$score' } } }
+    ]);
+    const avgAttemptScore = (avgScoreAgg && avgScoreAgg[0] && avgScoreAgg[0].avgScore) ? Number(avgScoreAgg[0].avgScore) : null;
+
+    const avgAttemptsPerUserAgg = await Attempt.aggregate([
+      { $match: { userId: { $ne: null } } },
+      { $group: { _id: '$userId', attempts: { $sum: 1 } } },
+      { $group: { _id: null, avgAttempts: { $avg: '$attempts' } } }
+    ]);
+    const avgAttemptsPerUser = (avgAttemptsPerUserAgg && avgAttemptsPerUserAgg[0] && avgAttemptsPerUserAgg[0].avgAttempts) ? Number(avgAttemptsPerUserAgg[0].avgAttempts) : 0;
+
+    const avgAiScoreAgg = await Submission.aggregate([
+      { $match: { ai_score: { $ne: null } } },
+      { $group: { _id: null, avgAi: { $avg: '$ai_score' } } }
+    ]);
+    const avgAiScore = (avgAiScoreAgg && avgAiScoreAgg[0] && avgAiScoreAgg[0].avgAi) ? Number(avgAiScoreAgg[0].avgAi) : null;
+
+    // try to get DB stats (may require permissions)
+    let databaseSize = 'N/A';
+    try {
+      // mongoose.connection.db is available when connected
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      const stats = await mongoose.connection.db.stats();
+      if (stats && typeof stats.storageSize !== 'undefined') {
+        // storageSize in bytes -> human readable
+        const bytes = Number(stats.storageSize || stats.dataSize || 0);
+        const human = bytes > 0 ? `${(bytes / (1024 * 1024)).toFixed(2)} MB` : '0 MB';
+        databaseSize = human;
+      }
+    } catch (err) {
+      // ignore DB stats errors
+    }
+
+    res.json({
+      totalUsers,
+      newUsers7Days,
+      totalSubmissions,
+      pendingSubmissions,
+      totalExams,
+      publishedExams,
+      lessonsCount,
+      totalAttempts,
+      inProgressAttempts,
+      submittedAttempts,
+      avgAttemptScore,
+      avgAttemptsPerUser,
+      avgAiScore,
+      activeUsers,
+      databaseSize
+    });
+  } catch (e: any) {
+    console.error('Error building admin stats', e);
+    res.status(500).json({ message: e.message || 'Failed to build stats' });
+  }
 });
 
 router.get('/recent-submissions', async (req, res) => {
-  const limit = parseInt((req.query.limit as string) || '10', 10);
-  const items = await Submission.find().sort({ created_at: -1 }).limit(limit).lean();
-  // populate user email
+  // support pagination: ?page=1&limit=20
+  const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '20'), 10) || 20));
+  const skip = (page - 1) * limit;
+
+  const [total, items] = await Promise.all([
+    Submission.countDocuments(),
+    Submission.find().sort({ created_at: -1 }).skip(skip).limit(limit).lean(),
+  ]);
+
+  // populate user info
   const enriched = await Promise.all(items.map(async (it: any) => {
     let user: any = null;
     if (it.user_id && mongoose.isValidObjectId(it.user_id)) {
       user = await User.findById(it.user_id).lean();
     }
-    return { ...it, profiles: { email: user?.email } };
+    return {
+      ...it,
+      userId: it.user_id || null,
+      userEmail: user?.email || null,
+      userFullName: user?.full_name || null,
+    };
   }));
-  res.json(enriched);
+
+  res.json({ items: enriched, total });
+});
+
+// Admin: re-run AI grader for a submission (re-grade)
+router.put('/submissions/:id/grade', async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+
+  const { id } = req.params;
+  if (!id || !mongoose.isValidObjectId(id)) return res.status(400).json({ message: 'Invalid id' });
+
+  const doc = await Submission.findById(id);
+  if (!doc) return res.status(404).json({ message: 'Submission not found' });
+
+  try {
+    const prompt = doc.prompt || '';
+    const content = doc.content || '';
+    const result = await gradeWriting(prompt, content);
+
+    doc.ai_score = result.score;
+    if (result.details) doc.ai_criteria = result.details;
+    doc.ai_feedback = Array.isArray(result.feedback) ? result.feedback : [];
+    const suggestedCorrections = (result as any).suggested_corrections ?? (result as any).suggestedCorrections;
+    if (suggestedCorrections) doc.ai_corrections = suggestedCorrections;
+    doc.ai_raw = result.raw;
+    doc.graded_by = `manual-regrade:${admin.email || admin._id}`;
+    doc.graded_at = new Date();
+
+    await doc.save();
+    return res.json(await Submission.findById(id).lean());
+  } catch (err: any) {
+    console.error('Regrade failed', err);
+    return res.status(500).json({ message: 'Regrade failed', details: String(err?.message ?? err) });
+  }
 });
 
 // Admin: list users

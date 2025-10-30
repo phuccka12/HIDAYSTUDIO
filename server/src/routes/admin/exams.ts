@@ -5,13 +5,13 @@ import requireAdmin from '../../middleware/requireAdmin';
 
 const router = Router();
 
-// Helper to find section and question
+// Tìm kiếm section theo sectionId
 function findSectionById(exam: any, sectionId: string) {
   if (!exam || !Array.isArray(exam.sections)) return null;
   return exam.sections.find((s: any) => s.id === sectionId) || null;
 }
 
-// Admin: list exams with filters
+// Lấy danh sách đề thi với bộ lọc
 router.get('/exams', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
@@ -26,7 +26,7 @@ router.get('/exams', async (req, res) => {
   res.json({ total, items });
 });
 
-// Admin: create exam
+// tạo bài kiểm tra mới
 router.post('/exams', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
@@ -65,7 +65,7 @@ router.post('/exams', async (req, res) => {
   }
 });
 
-// Admin: get exam by id
+// lay thông tin bai kiem tra theo id
 router.get('/exams/:id', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
@@ -111,7 +111,7 @@ router.put('/exams/:id', async (req, res) => {
     }
   }
   try {
-    // optimistic version check to avoid silent overwrite
+    // kiểm tra xung đột phiên bản để tránh ghi đè im lặng
     if ('version' in payload) {
       const v = Number(payload.version);
       if (isNaN(v)) return res.status(400).json({ message: 'Invalid version' });
@@ -128,7 +128,7 @@ router.put('/exams/:id', async (req, res) => {
   }
 });
 
-// Admin: delete exam
+// xóa bài kiểm tra
 router.delete('/exams/:id', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
@@ -138,7 +138,7 @@ router.delete('/exams/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-// Admin: publish/unpublish
+// xuất bản / hủy xuất bản bài kiểm tra
 router.post('/exams/:id/publish', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
@@ -164,11 +164,9 @@ router.post('/exams/:id/unpublish', async (req, res) => {
   res.json({ ok: true, exam: updated });
 });
 
-// -----------------------------
-// Admin: question-level operations inside sections
-// -----------------------------
+// câu hỏi trong bài kiểm tra
 
-// Create question in a section
+// Tạo câu hỏi trong một section
 router.post('/exams/:examId/sections/:sectionId/questions', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
@@ -192,7 +190,7 @@ router.post('/exams/:examId/sections/:sectionId/questions', async (req, res) => 
   }
 });
 
-// Update a question
+// Cập nhật câu hỏi
 router.put('/exams/:examId/sections/:sectionId/questions/:questionId', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
@@ -217,7 +215,7 @@ router.put('/exams/:examId/sections/:sectionId/questions/:questionId', async (re
   }
 });
 
-// Delete a question
+// Xóa câu hỏi
 router.delete('/exams/:examId/sections/:sectionId/questions/:questionId', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
@@ -240,7 +238,7 @@ router.delete('/exams/:examId/sections/:sectionId/questions/:questionId', async 
   }
 });
 
-// Reorder questions in a section
+// Sắp xếp lại câu hỏi trong một section
 router.post('/exams/:examId/sections/:sectionId/questions/reorder', async (req, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;

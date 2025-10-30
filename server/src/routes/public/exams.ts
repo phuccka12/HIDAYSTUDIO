@@ -5,7 +5,7 @@ import { parsePage } from '../../utils/parsePage';
 
 const router = Router();
 
-// Public: list published exams
+// danh sách đề thi công khai
 router.get('/exams', async (req, res) => {
   const { q, tag, page, limit, published } = req.query;
   const { skip, limit: lim } = parsePage(req.query);
@@ -21,7 +21,7 @@ router.get('/exams', async (req, res) => {
   res.json({ total, items });
 });
 
-// Public: get exam by slug or id
+// lấy danh sách đề thi công khai theo slug hoặc id
 router.get('/exams/:slugOrId', async (req, res) => {
   const { slugOrId } = req.params;
   let exam = await Exam.findOne({ slug: slugOrId, published: true }).lean();

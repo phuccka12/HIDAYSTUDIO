@@ -5,8 +5,8 @@ import LandingPage from '../pages/LandingPage';
 import UserDashboard from '../pages/user/UserDashboard';
 import AdminDashboard from '../pages/admin/AdminDashboard';
 import AdminUsersList from '../pages/admin/UsersList';
-import AdminUserCreate from '../pages/admin/users/AdminUserCreate';
 import AdminUserEdit from '../pages/admin/users/AdminUserEdit';
+import RecentSubmissions from '../pages/admin/RecentSubmissions';
 import ExamsList from '../pages/admin/content/ExamsList';
 import LessonsList from '../pages/admin/content/LessonsList';
 import UserProfilePage from '../pages/user/Profile';
@@ -97,10 +97,10 @@ const router = createBrowserRouter([
     ),
   },
   {
-    path: '/admin/users/create',
+    path: '/admin/recent-submissions',
     element: (
       <ProtectedRoute requiredRole="admin">
-        <Layout><AdminUserCreate /></Layout>
+        <Layout><RecentSubmissions /></Layout>
       </ProtectedRoute>
     ),
   },

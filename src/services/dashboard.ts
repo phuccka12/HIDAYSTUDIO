@@ -6,6 +6,18 @@ export interface DashboardStats {
   totalSubmissions: number;
   activeUsers: number;
   databaseSize: string;
+  // extended metrics
+  totalExams?: number;
+  publishedExams?: number;
+  lessonsCount?: number;
+  totalAttempts?: number;
+  inProgressAttempts?: number;
+  submittedAttempts?: number;
+  avgAttemptScore?: number | null;
+  avgAttemptsPerUser?: number;
+  avgAiScore?: number | null;
+  pendingSubmissions?: number;
+  newUsers7Days?: number;
 }
 
 export interface UserProgress {
@@ -34,6 +46,7 @@ export interface WritingSubmission {
   aiFeedback: any;
   createdAt: string;
   userEmail?: string;
+  userFullName?: string;
 }
 
 // Dashboard Service
@@ -51,6 +64,17 @@ export const dashboardService = {
         totalSubmissions: 0,
         activeUsers: 0,
         databaseSize: 'Error',
+        totalExams: 0,
+        publishedExams: 0,
+        lessonsCount: 0,
+        totalAttempts: 0,
+        inProgressAttempts: 0,
+        submittedAttempts: 0,
+        avgAttemptScore: null,
+        avgAttemptsPerUser: 0,
+        avgAiScore: null,
+        pendingSubmissions: 0,
+        newUsers7Days: 0
       };
     }
   },
@@ -70,18 +94,18 @@ export const dashboardService = {
     }
   },
 
-  // Get recent writing submissions (for admin)
-  async getRecentSubmissions(limit: number = 10): Promise<WritingSubmission[]> {
+  // Get recent writing submissions (for admin) with pagination
+  async getRecentSubmissions(page: number = 1, limit: number = 20): Promise<{ items: WritingSubmission[]; total: number }> {
     try {
-      const { data, error } = await apiFetch(`/admin/recent-submissions?limit=${limit}`);
+      const { data, error } = await apiFetch(`/admin/recent-submissions?page=${page}&limit=${limit}`);
       if (error) {
         console.error('Error fetching recent submissions:', error);
-        return [];
+        return { items: [], total: 0 };
       }
-      return data as WritingSubmission[] || [];
+      return (data as any) || { items: [], total: 0 };
     } catch (error) {
       console.error('Error fetching recent submissions:', error);
-      return [];
+      return { items: [], total: 0 };
     }
   },
 
@@ -97,6 +121,18 @@ export const dashboardService = {
     } catch (error) {
       console.error('Error fetching user submissions:', error);
       return [];
+    }
+  },
+
+  // Admin: re-run AI grader for a submission
+  async regradeSubmission(submissionId: string) {
+    try {
+      const { data, error } = await apiFetch(`/admin/submissions/${encodeURIComponent(submissionId)}/grade`, { method: 'PUT' });
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error regrading submission:', error);
+      throw error;
     }
   },
 

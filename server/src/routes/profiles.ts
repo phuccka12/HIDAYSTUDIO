@@ -19,6 +19,21 @@ router.get('/:id', async (req, res) => {
   res.json(user);
 });
 
+// Update current authenticated user's profile (convenience endpoint)
+router.put('/me', async (req, res) => {
+  const id = req.cookies['ielts_user'];
+  if (!id || !mongoose.isValidObjectId(id)) return res.status(401).json({ message: 'Not authenticated' });
+  const updates = req.body;
+  try {
+    const user = await User.findByIdAndUpdate(id, { ...updates, updated_at: new Date() }, { new: true }).lean();
+    if (!user) return res.status(404).json({ message: 'Not found' });
+    return res.json(user);
+  } catch (err) {
+    console.error('Error updating /profiles/me:', err);
+    return res.status(500).json({ message: 'Failed to update profile' });
+  }
+});
+
 // Update profile
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
