@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test files
+test-*.js
+test_*.ts
+*test*.js
+check-*.js
+list-*.js
+
+# Uploads (chỉ ignore file mới, giữ lại file hiện có)
+# uploads/*.webm
+# uploads/*.mp3  
+# uploads/*.png
+# uploads/*.jpg
+# uploads/*.jpeg
+# uploads/*.docx
+# uploads/*.pdf
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
