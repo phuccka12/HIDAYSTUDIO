@@ -14,6 +14,7 @@ import usersRouter from './routes/users';
 import uploadsRouter from './routes/uploads';
 import llmRouter from './routes/llm';
 import writingRouter from './routes/writing';
+import testRouter from './routes/test';
 // use require() for path to avoid ESM/CommonJS interop issues when running with ts-node-dev
 const path = require('path');
 
@@ -39,6 +40,7 @@ app.use('/llm', llmRouter);
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 app.use('/', uploadsRouter);
 app.use('/writing', writingRouter);
+app.use('/test', testRouter);
 app.get('/', (_req, res) => res.json({ status: 'ok' }));
 
 // Load environment variables from server/.env when present

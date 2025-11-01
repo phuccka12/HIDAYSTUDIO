@@ -11,8 +11,22 @@ function isWritingTask(taskType?: string) {
 
 router.post('/', async (req, res) => {
   const payload = req.body || {};
+  const startTime = Date.now();
+  
+  console.log(`[Submissions] New submission request:`, {
+    taskType: payload.task_type,
+    userId: payload.user_id,
+    promptLength: payload.prompt?.length || 0,
+    contentLength: payload.content?.length || 0,
+    timestamp: new Date().toISOString()
+  });
 
   if (!payload.task_type || !payload.prompt || !payload.content) {
+    console.warn('[Submissions] Missing required fields in request:', {
+      hasTaskType: !!payload.task_type,
+      hasPrompt: !!payload.prompt,
+      hasContent: !!payload.content
+    });
     return res.status(400).json({ error: 'Missing required fields: task_type, prompt, or content' });
   }
 
@@ -45,30 +59,60 @@ router.post('/', async (req, res) => {
 
       // Lưu kết quả chấm điểm vào database
       await doc.save();
+      console.log(`[Submissions] Successfully graded writing submission ${doc._id} with score: ${result.score}`);
     }
   } catch (err: any) {
-    console.error('AI grading failed', err);
+    console.error(`[Submissions] AI grading failed for submission ${doc?._id}:`, {
+      error: err?.message || String(err),
+      taskType: payload.task_type,
+      promptLength: payload.prompt?.length || 0,
+      contentLength: payload.content?.length || 0,
+      stack: err?.stack
+    });
+    
     // Không block request — lưu lỗi vào ai_raw / ai_feedback để audit
     if (!doc) {
       // Nếu doc không tồn tại (hiếm), trả lỗi
-      return res.status(500).json({ error: 'Submission created but grading failed and doc missing', details: String(err?.message ?? err) });
+      return res.status(500).json({ 
+        error: 'Submission created but grading failed and doc missing', 
+        details: String(err?.message ?? err) 
+      });
     }
+    
     doc.ai_feedback = Array.isArray(doc.ai_feedback) ? doc.ai_feedback : [];
     doc.ai_feedback.unshift(`AI grading error: ${String(err?.message ?? err)}`);
     doc.ai_raw = (doc.ai_raw || '') + `\nGRADER_ERROR: ${String(err?.message ?? err)}`;
     doc.graded_at = new Date();
 
     // Lưu lại lỗi vào database
-    try { await doc.save(); } catch (e) { console.error('Failed to save doc after grading error', e); }
+    try { 
+      await doc.save();
+      console.log(`[Submissions] Saved error info for submission ${doc._id}`);
+    } catch (e) { 
+      console.error(`[Submissions] Failed to save doc after grading error for ${doc._id}:`, e);
+    }
   }
 
   // Trả về document (đã được cập nhật)
   try {
     const out = await Submission.findById(doc._id).lean();
+    const processingTime = Date.now() - startTime;
+    
+    console.log(`[Submissions] Request completed successfully:`, {
+      submissionId: doc._id,
+      processingTime: `${processingTime}ms`,
+      aiScore: out?.ai_score,
+      hasAiFeedback: Array.isArray(out?.ai_feedback) && out.ai_feedback.length > 0,
+      isWritingTask: isWritingTask(payload.task_type)
+    });
+    
     return res.json(out);
   } catch (err: any) {
-    console.error('Failed to fetch the updated submission:', err);
-    return res.status(500).json({ error: 'Failed to fetch the updated submission', details: String(err?.message ?? err) });
+    console.error('[Submissions] Failed to fetch the updated submission:', err);
+    return res.status(500).json({ 
+      error: 'Failed to fetch the updated submission', 
+      details: String(err?.message ?? err) 
+    });
   }
 });
 // Lấy danh sách submission (có thể lọc theo user_id)
