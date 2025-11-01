@@ -1,5 +1,5 @@
-import * as express from 'express';
 // Use require() for these to avoid ESM/CommonJS interop issues when running with ts-node-dev
+const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 import mongoose from 'mongoose';
@@ -39,7 +39,7 @@ app.use('/llm', llmRouter);
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 app.use('/', uploadsRouter);
 app.use('/writing', writingRouter);
-app.get('/', (_req, res) => res.json({ status: 'ok' }));
+app.get('/', (_req: any, res: any) => res.json({ status: 'ok' }));
 
 // Load environment variables from server/.env when present
 dotenv.config();

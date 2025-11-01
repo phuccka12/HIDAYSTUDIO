@@ -54,7 +54,7 @@ Dạng JSON mong đợi:
     "lexical": number,
     "grammar": number
   },
-  "feedback": ["gạch đầu dòng ngắn 1", "gạch đầu dòng ngắn 2"],
+  "feedback": ["Mức độ đáp ứng yêu cầu: nhận xét ngắn", "Tính mạch lạc và liên kết: nhận xét ngắn", "Từ vựng: nhận xét ngắn", "Ngữ pháp: nhận xét ngắn"],
   "suggested_corrections": "phần bài viết đã sửa (<=200 từ)"
 }
 
@@ -64,7 +64,7 @@ ${taskPrompt}
 Đáp án của học sinh:
 ${userAnswer}
 
-Ràng buộc: chấm điểm bảo thủ, ưu tiên các mức điểm tăng theo 0.0 hoặc 0.5. Chỉ xuất JSON hợp lệ.
+Ràng buộc: chấm điểm bảo thủ, ưu tiên các mức điểm tăng theo 0.0 hoặc 0.5. Chỉ xuất JSON hợp lệ với feedback bằng tiếng Việt.
 `;
 }
 
@@ -76,7 +76,6 @@ export async function gradeWriting(taskPrompt: string, userAnswer: string): Prom
   const prompt = buildPrompt(taskPrompt ?? '', userAnswer ?? '');
 
   // Gọi LLM (wrapper trả về { text, raw })
-const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
   const maxTokens = Number(process.env.GEMINI_MAX_TOKENS || 60000);
 
   const { text: rawText, raw } = await callLLMForText(prompt)
@@ -142,10 +141,10 @@ const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
       if (score >= 5) return `${aspect}: Đủ — cải thiện tính liên kết và tập trung vào nhiệm vụ để đạt band 7.`;
       return `${aspect}: Yếu — tập trung vào độ rõ ràng, tổ chức và ngữ pháp chính xác.`;
     };
-    if (typeof details.task_response === 'number') bullets.push(suggest(Number(details.task_response), 'Task Response'));
-    if (typeof details.coherence === 'number') bullets.push(suggest(Number(details.coherence), 'Coherence & Cohesion'));
-    if (typeof details.lexical === 'number') bullets.push(suggest(Number(details.lexical), 'Lexical Resource'));
-    if (typeof details.grammar === 'number') bullets.push(suggest(Number(details.grammar), 'Grammar'));
+    if (typeof details.task_response === 'number') bullets.push(suggest(Number(details.task_response), 'Mức độ đáp ứng yêu cầu'));
+    if (typeof details.coherence === 'number') bullets.push(suggest(Number(details.coherence), 'Tính mạch lạc và liên kết'));
+    if (typeof details.lexical === 'number') bullets.push(suggest(Number(details.lexical), 'Từ vựng'));
+    if (typeof details.grammar === 'number') bullets.push(suggest(Number(details.grammar), 'Ngữ pháp'));
     feedbackArr = bullets;
   }
 

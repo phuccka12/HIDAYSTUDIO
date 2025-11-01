@@ -1,9 +1,29 @@
+// Gemini SDK integration
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+export async function callGeminiSDK(prompt: string) {
+  if (!GEMINI_API_KEY) throw new Error('No GEMINI_API_KEY found in environment');
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({ 
+    model: process.env.GEMINI_MODEL || "gemini-2.0-flash-exp",
+    generationConfig: {
+      maxOutputTokens: 500,
+      temperature: 0.1
+    }
+  });
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  const text = response.text();
+  return { text, raw: response };
+}
 // Lightweight REST-based client for Google Generative Language (Gemini)
 // This avoids depending on a specific client library API and gives clearer
 // control over requests and errors. It supports using an API key (dev) or
 // Application Default Credentials (service account) when available.
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+// ...existing code...
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-pro';
 
 if (!GEMINI_API_KEY && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
@@ -43,14 +63,15 @@ export async function callLLMForText(prompt: string) {
     throw new Error('No GEMINI_API_KEY or GOOGLE_APPLICATION_CREDENTIALS found in environment');
   }
 
-  // Build request to v1 generateText endpoint
-  const url = `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(GEMINI_MODEL)}:generateText${GEMINI_API_KEY ? `?key=${encodeURIComponent(GEMINI_API_KEY)}` : ''}`;
+  // Build request to v1beta generateContent endpoint (new API)
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent${GEMINI_API_KEY ? `?key=${encodeURIComponent(GEMINI_API_KEY)}` : ''}`;
 
   const body = {
-    prompt: { text: prompt },
-    // tune these options as needed
-    temperature: 0.0,
-    maxOutputTokens: Number(process.env.GEMINI_MAX_TOKENS || 1024)
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: Number(process.env.GEMINI_MAX_TOKENS || 2048)
+    }
   };
 
   try {
@@ -60,28 +81,33 @@ export async function callLLMForText(prompt: string) {
       body: JSON.stringify(body)
     });
 
-    // Response shape may vary; try common locations for generated text
-    // v1 responses often have `candidates` or `result.output` fields
+    // Parse v1beta generateContent response
     let text = '';
-    if (Array.isArray(data?.candidates) && data.candidates[0]) {
-      // candidate may contain `content` which is array of objects with `text`
-      const c = data.candidates[0];
-      if (typeof c === 'string') text = c;
-      else if (c?.content) {
-        // content may be array
-        if (Array.isArray(c.content)) {
-          text = c.content.map((p: any) => p.text || '').join('\n');
-        } else if (typeof c.content === 'string') text = c.content;
-      } else if (c?.output?.[0]?.content) {
-        text = Array.isArray(c.output[0].content) ? c.output[0].content.map((p: any) => p.text || '').join('\n') : String(c.output[0].content);
+    const response: any = data;
+    if (Array.isArray(response?.candidates) && response.candidates[0]) {
+      const candidate = response.candidates[0];
+      
+      // Try to get text from parts
+      if (candidate?.content?.parts && Array.isArray(candidate.content.parts)) {
+        text = candidate.content.parts.map((part: any) => part.text || '').join('\n');
       }
-    } else if (data?.result?.output) {
-      const out = data.result.output;
-      if (Array.isArray(out)) {
-        text = out.map((o: any) => (o?.content || []).map((c: any) => c.text || '').join('\n')).join('\n');
-      } else if (typeof out === 'string') text = out;
-    } else if (typeof data === 'string') text = data;
-    else text = JSON.stringify(data);
+      // If no parts, but has content, try direct access
+      else if (candidate?.content?.text) {
+        text = candidate.content.text;
+      }
+      // Check finishReason for issues
+      if (candidate.finishReason === 'MAX_TOKENS') {
+        console.log('⚠️ Gemini response was truncated due to MAX_TOKENS');
+      }
+    }
+    
+    if (!text && typeof data === 'string') {
+      text = data;
+    } else if (!text) {
+      // If still no text, return error message with reason
+      const finishReason = response?.candidates?.[0]?.finishReason;
+      text = `Error: No text content received from Gemini. FinishReason: ${finishReason || 'unknown'}`;
+    }
 
     return { text: String(text), raw: data };
   } catch (err: any) {
