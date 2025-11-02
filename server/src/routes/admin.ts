@@ -31,7 +31,11 @@ const requireAdmin = async (req: any, res: any) => {
 
   // Check ADMIN_EMAILS env var (comma-separated list)
   const adminListRaw = process.env.ADMIN_EMAILS || '';
-  const adminList = adminListRaw.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
+  let adminList = adminListRaw.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
+  // Fallback to a small built-in list to match frontend dev config when env var not set
+  if (adminList.length === 0) {
+    adminList = ['phuccao03738@gmail.com', 'admin@ielts-platform.com'];
+  }
   console.debug('requireAdmin: adminList=', adminList);
   if (adminList.includes((user.email || '').toLowerCase())) return user;
 
@@ -187,7 +191,9 @@ router.put('/submissions/:id/grade', async (req, res) => {
     doc.ai_feedback = Array.isArray(result.feedback) ? result.feedback : [];
     const suggestedCorrections = (result as any).suggested_corrections ?? (result as any).suggestedCorrections;
     if (suggestedCorrections) doc.ai_corrections = suggestedCorrections;
-    doc.ai_raw = result.raw;
+  if ((result as any).corrected_answer) doc.ai_corrected = (result as any).corrected_answer;
+  if ((result as any).confidence) doc.ai_confidence = (result as any).confidence;
+  doc.ai_raw = result.raw;
     doc.graded_by = `manual-regrade:${admin.email || admin._id}`;
     doc.graded_at = new Date();
 

@@ -37,8 +37,31 @@ const AdminSubmissionView: React.FC<{ submission: WritingSubmission | null; onCl
               <CardTitle>AI feedback & score</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="mb-2">Điểm AI: <span className="font-semibold">{submission.aiScore ?? 'Chưa có'}</span></div>
-              <div className="text-sm text-gray-700 whitespace-pre-wrap">{Array.isArray(submission.aiFeedback) ? submission.aiFeedback.join('\n\n') : String(submission.aiFeedback || '')}</div>
+              <div className="mb-2">Điểm AI: <span className="font-semibold">{((submission as any).ai_score ?? (submission as any).aiScore) != null ? ((submission as any).ai_score ?? (submission as any).aiScore) : 'Chưa có'}</span></div>
+              <div className="text-sm text-gray-700 whitespace-pre-wrap">{Array.isArray((submission as any).ai_feedback) ? (submission as any).ai_feedback.join('\n\n') : Array.isArray(submission.aiFeedback) ? submission.aiFeedback.join('\n\n') : String((submission as any).ai_feedback ?? submission.aiFeedback ?? '')}</div>
+              {/* Corrected answer (if any) */}
+              {((submission as any).ai_corrected || (submission as any).aiCorrected) && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-medium">Bản sửa (AI)</h4>
+                  <pre className="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 p-3 rounded mt-1">{(submission as any).aiCorrected || (submission as any).ai_corrected}</pre>
+                </div>
+              )}
+
+              {/* AI suggested corrections summary */}
+              {((submission as any).ai_corrections || (submission as any).aiCorrections) && (
+                <div className="mt-3 text-sm text-gray-700">
+                  <strong>Gợi ý sửa:</strong>
+                  <div className="mt-1 whitespace-pre-wrap">{(submission as any).aiCorrections || (submission as any).ai_corrections}</div>
+                </div>
+              )}
+
+              {/* Confidence (if provided) */}
+              {((submission as any).ai_confidence || (submission as any).aiConfidence) && (
+                <div className="mt-3 text-sm text-gray-600">
+                  <strong>Độ tin cậy (confidence):</strong>
+                  <pre className="whitespace-pre-wrap text-xs text-gray-700 mt-1">{JSON.stringify((submission as any).aiConfidence || (submission as any).ai_confidence, null, 2)}</pre>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -88,13 +111,13 @@ const RecentSubmissions: React.FC = () => {
             <div key={s.id} className="rounded-xl border p-4 hover:bg-gray-50">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="text-sm text-gray-500">{new Date(s.createdAt).toLocaleString('vi-VN')}</div>
-                  <div className="text-base font-medium">{(s.taskType || '').toUpperCase()} — {s.userFullName || s.userEmail || s.userId}</div>
+                  <div className="text-sm text-gray-500">{new Date(((s as any).created_at ?? s.createdAt) as string).toLocaleString('vi-VN')}</div>
+                  <div className="text-base font-medium">{(((s as any).task_type ?? s.taskType) || '').toString().toUpperCase()} — {s.userFullName || s.userEmail || s.userId}</div>
                   <div className="text-sm text-gray-700 mt-2 line-clamp-3">{(s.content || '').slice(0, 300)}{(s.content || '').length > 300 ? '...' : ''}</div>
                 </div>
 
                 <div className="ml-4 flex shrink-0 flex-col items-end gap-2">
-                  <div className="text-sm text-green-700 font-semibold">{s.aiScore ?? '—'}</div>
+                  <div className="text-sm text-green-700 font-semibold">{((s as any).ai_score ?? s.aiScore) ?? '—'}</div>
                   <div className="flex gap-2">
                     <button onClick={() => setSelected(s)} className="rounded-lg bg-blue-600 px-3 py-1 text-white">Xem</button>
                     <button

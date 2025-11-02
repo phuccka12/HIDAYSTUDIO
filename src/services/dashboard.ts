@@ -44,6 +44,9 @@ export interface WritingSubmission {
   content: string;
   aiScore: number | null;
   aiFeedback: any;
+  aiCorrected?: string | null;
+  aiConfidence?: any;
+  aiCorrections?: string | null;
   createdAt: string;
   userEmail?: string;
   userFullName?: string;

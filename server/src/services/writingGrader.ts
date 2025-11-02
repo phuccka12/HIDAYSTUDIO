@@ -11,6 +11,8 @@ export interface WritingGradeResult {
     [key: string]: any;  // cho phép các trường khác như parse_error, no_feedback, etc.
   };        
   suggested_corrections?: string;
+  corrected_answer?: string; // phiên bản được chỉnh sửa/hiệu đính của bài
+  confidence?: { [k: string]: number } | null; // optional confidence scores
   raw?: string;         // đầu ra thô của LLM để kiểm tra
   processing_time?: number; // thời gian xử lý (ms)
   model_used?: string;  // model được sử dụng
@@ -92,68 +94,69 @@ function buildPrompt(taskPrompt: string, userAnswer: string): string {
   const taskInfo = analyzeTaskType(taskPrompt);
   const wordCount = userAnswer.trim().split(/\s+/).length;
   
-  return `Bạn là giám khảo IELTS chính thức với 15+ năm kinh nghiệm. Chấm bài viết theo tiêu chuẩn IELTS chính xác.
+  return `Bạn là một giám khảo IELTS có kinh nghiệm, chấm nghiêm túc và đồng thời đóng vai trợ giảng: ngoài việc chấm điểm theo tiêu chuẩn, nếu cần hãy chỉnh sửa/viết lại phần trả lời của học sinh để cải thiện rõ rệt về nội dung, ngữ pháp và từ vựng.
 
-**NHIỆM VỤ**: Chấm điểm bài viết IELTS ${taskInfo.type.toUpperCase()} theo 4 tiêu chí chính với thang điểm 0-9 (bước 0.5).
+**NHIỆM VỤ**: Chấm bài viết IELTS ${taskInfo.type.toUpperCase()} theo 4 tiêu chí chính (Task Response, Coherence & Cohesion, Lexical Resource, Grammatical Range & Accuracy) trên thang 0-9 với bước 0.5.
 
-**QUAN TRỌNG**: Tất cả nhận xét phải bằng TIẾNG VIỆT. Không được sử dụng tiếng Anh trong phần feedback.
+**NGÔN NGỮ**: Tất cả output (feedback, rationale, corrected_answer, suggested_corrections) PHẢI BẰNG TIẾNG VIỆT. Không có phần text nào bằng tiếng Anh.
 
-**YÊU CẦU ĐẦU RA**: Trả về CHÍNH XÁC định dạng JSON sau (không có text thêm):
+**YÊU CẦU ĐẦU RA**: Trả về DUY NHẤT một chuỗi JSON (KHÔNG có giải thích bổ sung bên ngoài JSON). Dưới đây là định dạng JSON bắt buộc (giữ nguyên các trường):
 
-\`\`\`json
 {
+  "score": number,                     // điểm tổng (0..9, bước 0.5)
   "criteria": {
-    "task_response": [số từ 0-9, bước 0.5],
-    "coherence": [số từ 0-9, bước 0.5], 
-    "lexical": [số từ 0-9, bước 0.5],
-    "grammar": [số từ 0-9, bước 0.5]
+    "task_response": number,          // 0..9 (0.5 steps)
+    "coherence": number,
+    "lexical": number,
+    "grammar": number
   },
-  "feedback": [
-    "Phản hồi nhiệm vụ: [nhận xét cụ thể bằng tiếng Việt]",
-    "Tính mạch lạc và liên kết: [nhận xét cụ thể bằng tiếng Việt]", 
-    "Từ vựng: [nhận xét cụ thể bằng tiếng Việt]",
-    "Ngữ pháp: [nhận xét cụ thể bằng tiếng Việt]"
+  "confidence": {                      // độ tự tin của LLM cho từng tiêu chí (0-100)
+    "task_response": number,
+    "coherence": number,
+    "lexical": number,
+    "grammar": number,
+    "overall": number
+  },
+  "rationale": [                      // Các lý do chính (ngắn gọn) dẫn tới điểm - mảng tối đa 4 phần
+    "Lý do 1 (ví dụ: thiếu overview, luận điểm mơ hồ)",
+    "Lý do 2"
   ],
-  "suggested_corrections": "[sửa lỗi quan trọng nhất - tối đa 3 câu]"
+  "feedback": [                        // Các hướng cải thiện ngắn (Vietnamese), tối đa 8 dòng
+    "Phản hồi nhiệm vụ: ...",
+    "Tính mạch lạc và liên kết: ...",
+    "Từ vựng: ...",
+    "Ngữ pháp: ..."
+  ],
+  "suggested_corrections": "...",    // Tóm tắt các sửa lỗi quan trọng (1-3 câu)
+  "corrected_answer": "...",        // Phiên bản được chỉnh sửa của bài (nếu cần, giữ nguyên ý, tối đa 300 từ)
+  "vocab_upgrades": [                  // Những thay đổi nâng cấp từ vựng (khuyến khích): tối đa 8 mục
+    { "original": "...", "suggestion": "...", "reason": "..." }
+  ],
+  "edits": [                            // (tùy chọn) danh sách sửa/ghi lại đoạn/ câu: {original, corrected, reason}
+    { "original": "...", "corrected": "...", "reason": "..." }
+  ],
+  "raw": "..."                       // (tùy chọn) phần output thô từ LLM để debug
 }
-\`\`\`
 
-**TIÊU CHÍ CHẤM ĐIỂM**:
+HƯỚNG DẪN CHI TIẾT CHO LLM:
+- Chỉ trả về CHUỖI JSON hợp lệ duy nhất, KHÔNG có chú thích hay giải thích phía ngoài.
+- Các điểm cho mỗi tiêu chí phải là số (0..9) và làm tròn đến bước 0.5.
+- 'score' là trung bình cộng của 4 tiêu chí, làm tròn về 0.5.
+- 'confidence' là con số 0-100 cho thấy mức tin cậy của LLM về từng tiêu chí và overall.
+- 'rationale' hãy đưa những phát hiện trọng yếu nhất (ví dụ: thiếu overview, luận điểm chưa rõ, lặp ý, từ vựng hạn chế, lỗi ngữ pháp nghiêm trọng).
+- 'feedback' cung cấp các gợi ý hành động rõ ràng cho học sinh (ví dụ: "Thêm một câu overview ở đoạn 1", "Sử dụng linking words: however, moreover..." — nhưng bằng tiếng Việt).
+- Nếu bài có lỗi ngữ pháp hoặc lựa chọn từ không tự nhiên, hãy trả 'corrected_answer' — phiên bản được hiệu đính, vẫn giữ ý chính, viết tự nhiên và ngắn gọn (không thêm ý mới). Nếu bài đã tốt, 'corrected_answer' có thể là chuỗi rỗng.
+- 'suggested_corrections' là tóm tắt 1-3 sửa chính cần thực hiện ngay.
+- Luôn đảm bảo 'feedback' và 'rationale' viết bằng TIẾNG VIỆT, không dùng từ tiếng Anh trong phần này.
 
-1. **Task Response** (${taskInfo.type === 'task1' ? 'Task Achievement' : 'Task Response'}):
-${taskInfo.requirements.map(req => `   - ${req}`).join('\n')}
+THỐNG KÊ BÀI VIẾT:
+- Số từ bài học sinh: ${wordCount} (yêu cầu: ${taskInfo.type === 'task1' ? '150+' : '250+'})
 
-2. **Coherence and Cohesion**: 
-   - Tổ chức ý tưởng logic và mạch lạc
-   - Sử dụng liên từ và từ nối phù hợp
-   - Chia đoạn văn hợp lý
-
-3. **Lexical Resource**:
-   - Phạm vi từ vựng phong phú và chính xác
-   - Collocations tự nhiên
-   - Ít lỗi chính tả và từ vựng
-
-4. **Grammatical Range and Accuracy**:
-   - Đa dạng cấu trúc câu
-   - Độ chính xác ngữ pháp cao
-   - Punctuation đúng
-
-**THỐNG KÊ BÀI VIẾT**:
-- Số từ: ${wordCount} (yêu cầu: ${taskInfo.type === 'task1' ? '150+' : '250+'})
-- Task type: ${taskInfo.type.toUpperCase()}
-
-**ĐỀ BÀI**:
+ĐỀ BÀI:
 ${taskPrompt}
 
-**BÀI VIẾT CỦA HỌC SINH**:
-${userAnswer}
-
-**LƯU Ý QUAN TRỌNG**: 
-- Chấm điểm nghiêm khắc theo chuẩn IELTS thực tế
-- Ưu tiên điểm .0 và .5, tránh điểm lẻ khác
-- Feedback cụ thể và xây dựng
-- Chỉ trả về JSON không có text bổ sung
-- **BẮT BUỘC: Tất cả nhận xét phải viết bằng TIẾNG VIỆT hoàn toàn. Không được có từ tiếng Anh nào trong phần feedback.**`;
+BÀI HỌC SINH:
+${userAnswer}`;
 }
 
 /**
@@ -333,13 +336,19 @@ function extractGradingResults(parsed: any, rawText: string): WritingGradeResult
     feedback = generateFallbackFeedback(details, overall);
   }
 
+  // Extract corrected answer and confidence if present
+  const corrected = typeof parsed.corrected_answer === 'string' ? parsed.corrected_answer : (typeof parsed.correctedAnswer === 'string' ? parsed.correctedAnswer : undefined);
+  const confidence = parsed.confidence && typeof parsed.confidence === 'object' ? parsed.confidence : undefined;
+
   return {
     score: overall,
     feedback: feedback.slice(0, 8), // Giới hạn số lượng feedback
     details,
     suggested_corrections: typeof parsed.suggested_corrections === 'string' 
       ? parsed.suggested_corrections.slice(0, 1000) 
-      : undefined,
+      : (typeof parsed.suggestedCorrections === 'string' ? parsed.suggestedCorrections.slice(0,1000) : undefined),
+    corrected_answer: corrected,
+    confidence: confidence || null,
     raw: rawText
   };
 }
@@ -376,10 +385,7 @@ function extractFeedback(parsed: any): string[] {
 
   return feedback;
 }
-
-/**
- * Tạo feedback dự phòng khi LLM không trả về feedback hợp lệ
- */
+  
 function generateFallbackFeedback(criteria: any, overall: number): string[] {
   const feedback: string[] = [];
   
