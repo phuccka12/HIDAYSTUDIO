@@ -195,55 +195,6 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle, isMenuOpen }) => {
           </div>
         </div>
       </div>
-
-      {/* Mobile Navigation */}
-      <div className={cn(
-        "md:hidden bg-gradient-to-r from-blue-50 to-indigo-50 border-t border-blue-100/50 transition-all duration-300 transform",
-        isMenuOpen ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 hidden"
-      )}>
-        <div className="px-4 pt-3 pb-4 space-y-2">
-          <a href="#home" className="block px-4 py-3 text-gray-600 hover:text-blue-600 font-medium rounded-lg hover:bg-white/60 transition-all duration-200">
-            Trang chủ
-          </a>
-          <a href="#features" className="block px-4 py-3 text-gray-600 hover:text-blue-600 font-medium rounded-lg hover:bg-white/60 transition-all duration-200">
-            Tính năng
-          </a>
-          <a href="#ai-writing" className="block px-4 py-3 text-gray-600 hover:text-blue-600 font-medium rounded-lg hover:bg-white/60 transition-all duration-200 relative">
-            <span className="flex items-center">
-              AI Writing
-              <span className="ml-2 flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
-              </span>
-            </span>
-          </a>
-          <a href="#pricing" className="block px-4 py-3 text-gray-600 hover:text-blue-600 font-medium rounded-lg hover:bg-white/60 transition-all duration-200">
-            Bảng giá
-          </a>
-          <a href="#contact" className="block px-4 py-3 text-gray-600 hover:text-blue-600 font-medium rounded-lg hover:bg-white/60 transition-all duration-200">
-            Liên hệ
-          </a>
-          
-          {/* Mobile Auth Buttons */}
-          {!isAuthenticated && (
-            <div className="pt-4 space-y-3 border-t border-blue-100">
-              <button 
-                onClick={() => handleAuthClick('login')}
-                className="w-full px-4 py-3 font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-300 hover:text-blue-600 transition-all duration-200"
-              >
-                Đăng nhập
-              </button>
-              <button 
-                onClick={() => handleAuthClick('register')}
-                className="w-full px-4 py-3 font-medium text-white bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg hover:shadow-lg transition-all duration-200"
-              >
-                Đăng ký
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Auth Modal */}
       <AuthModal
         isOpen={authModalOpen}

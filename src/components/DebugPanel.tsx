@@ -1,12 +1,33 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/api';
 import { apiFetch } from '../services/_apiClient';
 
 const DebugPanel: React.FC = () => {
+  // Enable debug panel when VITE_DEBUG_PANEL=true or in dev mode
+  // For a silent background mode, set VITE_DEBUG_PANEL_HIDDEN=true and toggle visibility with Ctrl+Shift+D
+  const DEBUG_ENABLED = (import.meta.env.VITE_DEBUG_PANEL === 'true') || (import.meta.env.DEV === true);
+  const DEFAULT_HIDDEN = import.meta.env.VITE_DEBUG_PANEL_HIDDEN === 'true';
+
+  // If debug panel is not enabled, render nothing (safe for production)
+  if (!DEBUG_ENABLED) return null;
+
   const { user, refreshUser } = useAuth();
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [visible, setVisible] = useState<boolean>(() => !DEFAULT_HIDDEN);
+
+  // Keyboard shortcut to toggle panel visibility: Ctrl+Shift+D
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
+        setVisible(v => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const checkDatabaseDirectly = async () => {
     setIsLoading(true);
@@ -59,6 +80,40 @@ const DebugPanel: React.FC = () => {
       setIsLoading(false);
     }
   };
+
+  // If running hidden, perform a silent background check once and expose
+  // a tiny debug API on window so developers can trigger actions from the console.
+  useEffect(() => {
+    if (!DEFAULT_HIDDEN) return;
+
+    // Run a silent check on mount to validate backend connectivity in background
+    (async () => {
+      try {
+        await checkDatabaseDirectly();
+      } catch (e) {
+        // swallow - debug info already set in checkDatabaseDirectly
+      }
+    })();
+
+    // Expose small API for manual triggers from browser console
+    try {
+      (window as any).__debugPanel = {
+        checkDatabaseDirectly,
+        forceCreateAdminProfile,
+        refreshUser,
+        getDebugInfo: () => debugInfo,
+      };
+    } catch (e) {
+      // ignore
+    }
+
+    return () => {
+      try { delete (window as any).__debugPanel; } catch (e) { /* ignore */ }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!visible) return null;
 
   return (
     <div className="fixed bottom-4 right-4 bg-white border border-gray-300 rounded-lg shadow-lg p-4 max-w-md">

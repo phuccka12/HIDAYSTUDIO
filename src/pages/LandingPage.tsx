@@ -15,8 +15,12 @@ import {
   Play
 } from 'lucide-react';
 import DebugPanel from '../components/DebugPanel';
+import AuthModal from '../components/ui/AuthModal';
+import { useState } from 'react';
 
 const LandingPage: React.FC = () => {
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const fadeInUp = {
     initial: { opacity: 0, y: 20 },
     animate: { opacity: 1, y: 0 },
@@ -405,9 +409,13 @@ const LandingPage: React.FC = () => {
               Tham gia cùng hàng nghìn học viên đã đạt được mục tiêu IELTS với AI Writing
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button className="btn bg-white text-blue-600 hover:bg-gray-100 px-8 py-4 text-lg font-semibold">
+              <button
+                className="btn bg-white text-blue-600 hover:bg-gray-100 px-8 py-4 text-lg font-semibold"
+                onClick={() => { setAuthMode('register'); setAuthOpen(true); }}
+              >
                 Đăng ký miễn phí
               </button>
+              <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} initialMode={authMode} />
               <button className="btn border-2 border-white text-white hover:bg-white hover:text-blue-600 px-8 py-4 text-lg font-semibold">
                 Tìm hiểu thêm
               </button>

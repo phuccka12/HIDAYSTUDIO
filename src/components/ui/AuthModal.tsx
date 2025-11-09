@@ -134,23 +134,23 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50" style={{ display: 'table', width: '100%', height: '100vh' }}>
+    // Use flex centering and higher z-index to avoid being overlapped by other UI layers
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      
-      <div style={{ display: 'table-cell', verticalAlign: 'middle', textAlign: 'center', padding: '16px' }}>
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          className="inline-block bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto z-50"
-          style={{ textAlign: 'left' }}
-        >
+
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto z-[99999]"
+        style={{ textAlign: 'left' }}
+      >
         {/* Header */}
         <div className="relative bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-700 px-6 py-6 text-white">
           <button
@@ -414,8 +414,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
             )}
           </div>
         </form>
-        </motion.div>
-      </div>
+      </motion.div>
     </div>
   );
 };

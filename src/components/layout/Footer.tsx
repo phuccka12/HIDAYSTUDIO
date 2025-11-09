@@ -10,10 +10,10 @@ const Footer: React.FC = () => {
           <div className="col-span-1 md:col-span-2">
             <div className="flex items-center mb-4">
               <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold">IM</span>
+                <span className="text-white font-bold">HD</span>
               </div>
               <span className="ml-2 text-xl font-bold">
-                IELTS <span className="text-blue-400">Master</span>
+                HIDAY <span className="text-blue-400">BETA</span>
               </span>
             </div>
             <p className="text-gray-300 mb-4 max-w-md">
@@ -21,7 +21,7 @@ const Footer: React.FC = () => {
               giúp bạn đạt được mục tiêu band điểm mong muốn một cách hiệu quả nhất.
             </p>
             <div className="flex space-x-4">
-              <a href="#" className="text-gray-400 hover:text-blue-400 transition-colors">
+              <a href="" className="text-gray-400 hover:text-blue-400 transition-colors">
                 <Facebook size={20} />
               </a>
               <a href="#" className="text-gray-400 hover:text-blue-400 transition-colors">
@@ -71,15 +71,15 @@ const Footer: React.FC = () => {
             <ul className="space-y-3">
               <li className="flex items-center">
                 <Mail size={16} className="text-blue-400 mr-2" />
-                <span className="text-gray-300">support@ieltsmaster.vn</span>
+                <span className="text-gray-300">phuccao03738@gmail.com</span>
               </li>
               <li className="flex items-center">
                 <Phone size={16} className="text-blue-400 mr-2" />
-                <span className="text-gray-300">+84 123 456 789</span>
+                <span className="text-gray-300">0765882078</span>
               </li>
               <li className="flex items-center">
                 <MapPin size={16} className="text-blue-400 mr-2" />
-                <span className="text-gray-300">Hà Nội, Việt Nam</span>
+                <span className="text-gray-300">Tân Phú, TP.HCM</span>
               </li>
             </ul>
           </div>
@@ -87,7 +87,7 @@ const Footer: React.FC = () => {
 
         <div className="border-t border-gray-800 mt-8 pt-8 text-center">
           <p className="text-gray-400">
-            © 2024 IELTS Master. All rights reserved.
+            From with Love ❤️ by HIDAYSTUDIO
           </p>
         </div>
       </div>
