@@ -1,36 +1,30 @@
-// Admin emails configuration
-const ADMIN_EMAILS = [
-  'phuccao03738@gmail.com',
-  'admin@ielts-platform.com',
-  // Thêm email admin khác ở đây
-];
-
-// Admin middleware
+// Admin middleware: rely on user.role (from server) instead of a hardcoded email list
 export const adminMiddleware = {
-  // Check if user is admin
-  isAdmin: (email: string): boolean => {
-    return ADMIN_EMAILS.includes(email.toLowerCase());
+  // Check if user is admin. Accepts either a user object or an email string.
+  isAdmin: (userOrEmail: any): boolean => {
+    if (!userOrEmail) return false;
+    if (typeof userOrEmail === 'string') {
+      // We no longer grant admin via email string on the client. Return false.
+      return false;
+    }
+    // If an object was provided, prefer role check
+    return (userOrEmail.role || '').toLowerCase() === 'admin';
   },
 
-  // Get user role based on email
-  getUserRole: (email: string): 'admin' | 'user' => {
-    return adminMiddleware.isAdmin(email) ? 'admin' : 'user';
+  // Get user role based on provided user object (fallback to 'user')
+  getUserRole: (user: any): 'admin' | 'user' => {
+    if (!user) return 'user';
+    return adminMiddleware.isAdmin(user) ? 'admin' : 'user';
   },
 
-  // Middleware function for route protection
+  // Middleware function for route protection (throws on failure)
   requireAdmin: (user: any) => {
-    if (!user) {
-      throw new Error('Không có thông tin user');
+    if (!user || !user.email) {
+      throw new Error('Không có thông tin user hợp lệ');
     }
-    
-    if (!user.email) {
-      throw new Error('Email không hợp lệ');
-    }
-    
-    if (!adminMiddleware.isAdmin(user.email)) {
+    if (!adminMiddleware.isAdmin(user)) {
       throw new Error('Chỉ admin mới có thể truy cập');
     }
-    
     return true;
   },
 
@@ -38,13 +32,13 @@ export const adminMiddleware = {
   checkAdminPermission: async (user: any) => {
     try {
       adminMiddleware.requireAdmin(user);
-      return { 
-        success: true, 
-        role: 'admin' 
+      return {
+        success: true,
+        role: 'admin'
       };
     } catch (error) {
-      return { 
-        success: false, 
+      return {
+        success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
         role: 'user'
       };

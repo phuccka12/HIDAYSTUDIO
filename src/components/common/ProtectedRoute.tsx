@@ -44,7 +44,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   });
   
   // Use middleware to check admin access (synchronous)
-  const isAdminByMiddleware = user?.email ? adminMiddleware.isAdmin(user.email) : false;
+  // Pass the full user object so middleware can check role === 'admin'.
+  const isAdminByMiddleware = user ? adminMiddleware.isAdmin(user) : false;
   
   console.log('🛡️ Middleware check:', {
     userEmail: user?.email,

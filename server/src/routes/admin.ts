@@ -10,7 +10,7 @@ import { gradeWriting } from '../services/writingGrader';
 const router = Router();
 
 // Simple admin guard using cookie (dev). In production use real auth and RBAC.
-// Accepts users who have role === 'admin' in DB OR whose email is listed in ADMIN_EMAILS env var.
+// Only users with role === 'admin' in the DB are accepted. Environment-based admin mapping removed.
 const requireAdmin = async (req: any, res: any) => {
   const id = req.cookies['ielts_user'];
   // debug log
@@ -29,15 +29,7 @@ const requireAdmin = async (req: any, res: any) => {
   // Check role in DB
   if (user.role === 'admin') return user;
 
-  // Check ADMIN_EMAILS env var (comma-separated list)
-  const adminListRaw = process.env.ADMIN_EMAILS || '';
-  let adminList = adminListRaw.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
-  // Fallback to a small built-in list to match frontend dev config when env var not set
-  if (adminList.length === 0) {
-    adminList = ['phuccao03738@gmail.com', 'admin@ielts-platform.com'];
-  }
-  console.debug('requireAdmin: adminList=', adminList);
-  if (adminList.includes((user.email || '').toLowerCase())) return user;
+  // No environment-based admin mapping: require DB role === 'admin' only.
 
   res.status(403).json({ message: 'Forbidden' });
   return null;

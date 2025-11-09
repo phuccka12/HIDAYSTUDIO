@@ -29,9 +29,7 @@ const requireAdmin = async (req: any, res: any) => {
   const user = await User.findById(id).lean();
   if (!user) { res.status(403).json({ message: 'Forbidden' }); return null; }
   if (user.role === 'admin') return user;
-  const adminListRaw = process.env.ADMIN_EMAILS || '';
-  const adminList = adminListRaw.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
-  if (adminList.includes((user.email || '').toLowerCase())) return user;
+  // Only DB role === 'admin' grants access. No env-based admin mapping.
   res.status(403).json({ message: 'Forbidden' });
   return null;
 };

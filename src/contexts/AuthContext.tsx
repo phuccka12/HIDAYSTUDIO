@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { authService, type Profile } from '../services/api';
 import { apiFetch } from '../services/_apiClient';
-import adminMiddleware from '../middleware/adminMiddleware';
 
 // User interface that matches our app needs
 export interface User {
@@ -27,15 +26,16 @@ const convertBackendUser = (backendUser: any, profile?: Profile | null): User | 
   if (!backendUser) return null;
 
   const normalizedId = getBackendUserId(backendUser);
-  // Use middleware to determine role
-  const role = adminMiddleware.getUserRole(backendUser.email);
+  // Prefer role reported by backend user object or profile. Fall back to 'user'.
+  const inferredRole = (backendUser.role || profile?.role || 'user');
+  const role = String(inferredRole).toLowerCase() === 'admin' ? 'admin' : 'user';
 
   console.log('🔄 Converting backend user:', {
     userId: normalizedId,
     email: backendUser.email,
     profile: profile,
     profileRole: profile?.role,
-    middlewareRole: role,
+    backendRole: backendUser.role,
     finalRole: role
   });
 
@@ -188,9 +188,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
       const result = await authService.signIn(email, password);
-      if (result.data?.user) {
-        const profile = (result.data as any).profile;
-        const convertedUser = convertBackendUser(result.data.user, profile);
+      // Prefer session.user (full DB user) returned on signin; fall back to lightweight user
+      const sessionUser = (result.data as any)?.session?.user;
+      const lightweightUser = (result.data as any)?.user;
+      const profile = (result.data as any).profile;
+      const backendUserToUse = sessionUser || lightweightUser;
+      if (backendUserToUse) {
+        const convertedUser = convertBackendUser(backendUserToUse, profile);
         setUser(convertedUser);
       }
       setIsLoading(false);
