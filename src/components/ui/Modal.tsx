@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 export function Backdrop({ onClose }: { onClose: () => void }) {
   return (
@@ -19,8 +20,9 @@ export default function Modal({
   children: ReactNode;
   widthClass?: string;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  const modal = (
+    // Align to top on small screens to avoid issues with mobile keyboards; center on larger screens.
+    <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       {/* ensure modal doesn't exceed viewport height and make content scrollable */}
       <div className={`relative z-10 ${widthClass} max-h-[90vh]`}> 
@@ -42,4 +44,9 @@ export default function Modal({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modal, document.body);
+  }
+  return modal;
 }

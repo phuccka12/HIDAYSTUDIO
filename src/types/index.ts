@@ -40,13 +40,37 @@ export interface Test {
   updatedAt: string;
 }
 
+export interface QuestionMedia {
+  type: 'image' | 'audio' | 'video';
+  url: string;
+}
+
+export interface QuestionMetadata {
+  listening?: {
+    audioUrl?: string;
+    audio?: string;
+    transcript?: string;
+    comprehension?: {
+      type: 'mcq' | 'short' | 'fill';
+    };
+  };
+  speaking?: {
+    audioExampleUrl?: string;
+    imageUrl?: string;
+    rubric?: string;
+  };
+  [key: string]: unknown;
+}
+
 export interface Question {
   id: string;
-  type: 'mcq' | 'multi' | 'essay' | 'audio' | 'fill' | 'true_false' | string;
+  type: 'mcq' | 'multi' | 'essay' | 'audio' | 'fill' | 'true_false' | 'listening' | 'speaking' | string;
   text: string;
   prompt?: string;
   choices?: Choice[];
   points?: number;
+  metadata?: QuestionMetadata;
+  media?: QuestionMedia[];
 }
 
 export interface Choice {
