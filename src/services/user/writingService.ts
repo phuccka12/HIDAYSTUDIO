@@ -1,10 +1,15 @@
 // Service frontend gọi các endpoint backend liên quan đến Writing/Submission
 import { apiFetch } from '../_apiClient'; // nếu bạn có _apiClient; nếu không, dùng fetch
 
-const API_BASE = (import.meta && (import.meta as any).env?.VITE_API_BASE) || 'http://localhost:4000';
+const API_BASE = import.meta.env?.VITE_API_BASE || 'http://localhost:4000';
 
-export async function getRandomPrompt(taskType = 'IELTS_Task2') {
-  const url = `${API_BASE}/writing/random?task_type=${encodeURIComponent(taskType)}`;
+export async function getRandomPrompt(taskType = 'task2') {
+  // Map old task_type to new task format
+  let task = taskType;
+  if (taskType === 'IELTS_Task1') task = 'task1';
+  if (taskType === 'IELTS_Task2') task = 'task2';
+  
+  const url = `${API_BASE}/writing/prompts/random?task=${encodeURIComponent(task)}`;
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) {
     const txt = await res.text().catch(() => res.statusText);

@@ -1,9 +1,8 @@
-import * as express from 'express';
-// Use require() for these to avoid ESM/CommonJS interop issues when running with ts-node-dev
-const cors = require('cors');
-const cookieParser = require('cookie-parser');
+import express from 'express';
+import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import mongoose from 'mongoose';
-const dotenv = require('dotenv');
+import dotenv from 'dotenv';
 import 'express-async-errors';
 import authRoutes from './routes/auth';
 import profileRoutes from './routes/profiles';
@@ -15,8 +14,8 @@ import uploadsRouter from './routes/uploads';
 import llmRouter from './routes/llm';
 import writingRouter from './routes/writing';
 import testRouter from './routes/test';
-// use require() for path to avoid ESM/CommonJS interop issues when running with ts-node-dev
-const path = require('path');
+import debugRouter from './routes/debug';
+import path from 'path';
 
 const app = express();
 
@@ -41,6 +40,7 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 app.use('/', uploadsRouter);
 app.use('/writing', writingRouter);
 app.use('/test', testRouter);
+app.use('/debug', debugRouter);
 app.get('/', (_req, res) => res.json({ status: 'ok' }));
 
 // Load environment variables from server/.env when present
@@ -48,14 +48,12 @@ dotenv.config();
 
 // Accept either MONGO_URL or MONGODB_URI for compatibility
 const MONGO_URL = process.env.MONGO_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017/ielts-dev';
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 4001;
 
 mongoose.connect(MONGO_URL).then(() => {
-  // eslint-disable-next-line no-console
   console.log('Connected to MongoDB');
   app.listen(PORT, () => console.log(`Server listening on ${PORT}`));
 }).catch(err => {
-  // eslint-disable-next-line no-console
   console.error('Failed to connect to MongoDB', err);
 });
 

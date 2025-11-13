@@ -10,7 +10,13 @@ const WritingEditor: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
-  const [currentSubmission, setCurrentSubmission] = useState<any | null>(null);
+  const [currentSubmission, setCurrentSubmission] = useState<{
+    _id: string;
+    graded_at?: string;
+    ai_score?: number;
+    ai_criteria?: Record<string, number>;
+    ai_feedback?: string[];
+  } | null>(null);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -40,14 +46,45 @@ const WritingEditor: React.FC = () => {
       };
       const created = await writingService.createSubmission(payload);
       setCurrentSubmission(created);
-      setIsSubmitting(false);
-      if (created.graded_at) {
-        setSuccessMsg('Bài đã được chấm xong.');
+      
+      if (created.graded_at && created.ai_score !== null) {
+        setSuccessMsg('Bài đã được chấm xong! Điểm: ' + created.ai_score + '/9.0');
+        setIsSubmitting(false);
       } else {
-        setErrorMsg('Chấm bài thất bại. Kiểm tra lại.');
+        setInfoMsg('Đang chấm bài... Vui lòng chờ.');
+        // Poll for grading results
+        let attempts = 0;
+        const maxAttempts = 10;
+        const pollInterval = setInterval(async () => {
+          attempts++;
+          try {
+            const updated = await writingService.getSubmission(created._id);
+            if (updated && updated.graded_at && updated.ai_score !== null) {
+              setCurrentSubmission(updated);
+              setSuccessMsg('Bài đã được chấm xong! Điểm: ' + updated.ai_score + '/9.0');
+              setInfoMsg(null);
+              clearInterval(pollInterval);
+              setIsSubmitting(false);
+            } else if (attempts >= maxAttempts) {
+              setErrorMsg('Chấm bài mất quá nhiều thời gian. Vui lòng thử lại sau.');
+              setInfoMsg(null);
+              clearInterval(pollInterval);
+              setIsSubmitting(false);
+            }
+          } catch (err) {
+            console.error('Polling error:', err);
+            if (attempts >= maxAttempts) {
+              setErrorMsg('Có lỗi khi kiểm tra kết quả chấm bài.');
+              setInfoMsg(null);
+              clearInterval(pollInterval);
+              setIsSubmitting(false);
+            }
+          }
+        }, 2000); // Poll every 2 seconds
       }
-    } catch (err: any) {
-      setErrorMsg(String(err?.message ?? err));
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setErrorMsg(errorMessage);
       setIsSubmitting(false);
     }
   };
@@ -56,10 +93,11 @@ const WritingEditor: React.FC = () => {
   setErrorMsg(null);
   setInfoMsg('Đang lấy đề ngẫu nhiên...');
   try {
-    const data = await writingService.getRandomPrompt();
+    const data = await writingService.getRandomPrompt('IELTS_Task2');
+    console.log('Random prompt data:', data); // Debug log
     setPrompt(data?.prompt ?? '');
     setInfoMsg(null);
-  } catch (err: any) {
+  } catch (err) {
     console.error('getRandomPrompt error', err);
     setInfoMsg(null);
     setErrorMsg('Không lấy được đề ngẫu nhiên. Kiểm tra kết nối tới backend.');
@@ -78,6 +116,7 @@ const WritingEditor: React.FC = () => {
         >
           Tạo đề ngẫu nhiên
         </button>
+        {/* Direct API test button removed */}
         <button
           type="button"
           className="border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-100 transition"
@@ -90,7 +129,7 @@ const WritingEditor: React.FC = () => {
       <div className="mb-4">
         <label className="block text-sm font-medium text-gray-700 mb-1">Đề bài</label>
         <textarea
-          className="w-full border rounded-lgd-lg px-3 py-2 font- text-red-500"
+          className="w-full border rounded-lg px-3 py-2"
           rows={3}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}

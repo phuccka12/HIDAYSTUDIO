@@ -1,7 +1,7 @@
-import express from 'express';
+import { Router } from 'express';
 import { gradeWriting } from '../services/writingGrader';
 
-const router = express.Router();
+const router = Router();
 
 // Debug endpoint to test Vietnamese feedback
 router.post('/test-vietnamese', async (req, res) => {

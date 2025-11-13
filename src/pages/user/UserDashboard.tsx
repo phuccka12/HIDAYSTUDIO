@@ -1,78 +1,138 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { BookOpen, Target, TrendingUp, Clock, Award, Users, RefreshCw } from 'lucide-react';
-import { userService, type UserProgressItem } from '../../services/user/userService';
+import { BookOpen, Target, TrendingUp, Clock, Award, RefreshCw } from 'lucide-react';
+import { userService, type UserProgressItem, type UserProfile } from '../../services/user/userService';
 import type { WritingSubmission } from '../../services/dashboard';
 
 const UserDashboard: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [userProgress, setUserProgress] = useState<UserProgressItem[]>([]);
   const [userSubmissions, setUserSubmissions] = useState<WritingSubmission[]>([]);
-  const [profile, setProfile] = useState<any | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const intervalRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    const fetchUserData = async () => {
-      if (!user?.id) return;
+  const fetchUserData = useCallback(async (silent = false) => {
+    if (!user?.id) return;
+    if (!silent) {
       setIsLoading(true);
       setErrorMsg(null);
+    } else {
+      setIsAutoRefreshing(true);
+    }
+    try {
+      // Use consolidated dashboard endpoint when possible
       try {
-        // Fetch user profile (display name/avatar)
+        const dash = await userService.getDashboard();
+        if (dash) {
+          setProfile(dash.account || null);
+          // Use skills progress from the dashboard
+          setUserProgress(dash.progress?.skills || []);
+          // gradingHistory maps to writing submissions
+          const mappedSubmissions = (dash.gradingHistory || []).map((g: any) => ({
+            id: g.id,
+            userId: user.id || '',
+            taskType: g.task_type || 'task1' as const,
+            prompt: g.prompt,
+            content: g.content || '',
+            aiScore: g.ai_score,
+            aiFeedback: g.ai_feedback,
+            aiCorrected: g.ai_corrected,
+            aiCorrections: g.ai_corrections,
+            createdAt: g.created_at
+          }));
+          setUserSubmissions(mappedSubmissions as WritingSubmission[]);
+        }
+      } catch {
+        // fallback to older granular calls
         try {
           const p = await userService.getUserProfile(user.id);
           setProfile(p);
-        } catch (e) {
-          // ignore profile error
-        }
-        // Fetch user progress from userService (real DB)
-        const progress = await userService.getUserProgress(user.id);
-        setUserProgress(progress);
-
-        // Fetch user's writing submissions
-        const submissions = await userService.getUserSubmissions(user.id, 5);
-        setUserSubmissions(submissions);
-      } catch (error) {
-        setUserProgress([]);
-        setUserSubmissions([]);
-  setErrorMsg('Không thể tải dữ liệu dashboard. Vui lòng thử lại hoặc kiểm tra kết nối.');
-        console.error('Error fetching user data:', error);
-      } finally {
-        setIsLoading(false);
+        } catch { /* ignore */ }
+        try {
+          const progress = await userService.getUserProgress(user.id);
+          setUserProgress(progress);
+        } catch { /* ignore */ }
+        try {
+          const submissions = await userService.getUserSubmissions(user.id, 5);
+          setUserSubmissions(submissions);
+        } catch { /* ignore */ }
       }
-    };
-    fetchUserData();
+    } catch (error) {
+      setUserProgress([]);
+      setUserSubmissions([]);
+      if (!silent) {
+        setErrorMsg('Không thể tải dữ liệu dashboard. Vui lòng thử lại hoặc kiểm tra kết nối.');
+      }
+      console.error('Error fetching user data:', error);
+    } finally {
+      if (!silent) {
+        setIsLoading(false);
+      } else {
+        setIsAutoRefreshing(false);
+      }
+    }
   }, [user?.id]);
 
+  // Effect for initial load và setup auto-refresh
+  useEffect(() => {
+    fetchUserData();
+    
+    // Auto refresh every 30 seconds
+    intervalRef.current = window.setInterval(() => {
+      fetchUserData(true); // Silent refresh
+    }, 30000);
+    
+    // Refresh when window gets focus
+    const handleFocus = () => {
+      fetchUserData(true); // Silent refresh
+    };
+    
+    // Refresh when page becomes visible (tab switching)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchUserData(true); // Silent refresh
+      }
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      if (intervalRef.current) {
+        window.clearInterval(intervalRef.current);
+      }
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchUserData]);
+
   const handleRefresh = async () => {
-    setIsLoading(true);
-    setErrorMsg(null);
-    try {
-      if (!user?.id) return;
-      const p = await userService.getUserProfile(user.id).catch(() => null);
-      setProfile(p);
-      const progress = await userService.getUserProgress(user.id);
-      setUserProgress(progress);
-      const submissions = await userService.getUserSubmissions(user.id, 5);
-      setUserSubmissions(submissions);
-    } catch (e) {
-      console.error('Refresh failed', e);
-      setErrorMsg('Làm mới thất bại.');
-    } finally {
-      setIsLoading(false);
-    }
+    await fetchUserData(); // Use the unified fetch function
   };
 
   // (No client-side sample data — use real data from backend)
 
   // Calculate stats from real data
   const totalExercises = userProgress.reduce((sum, skill) => sum + (skill.completed_exercises || 0), 0);
-  // Compute average target_score only from items that have it
-  const targetScores = userProgress.map(s => (s as any).target_score).filter((v) => typeof v === 'number');
-  const targetScore = targetScores.length > 0 ? targetScores.reduce((sum, v) => sum + v, 0) / targetScores.length : NaN;
-  const currentScore = userProgress.length > 0 ? 
-    userProgress.reduce((sum, skill) => sum + (skill.current_level || 0), 0) / userProgress.length : 0;
-  const studyHours = Math.floor(totalExercises * 0.5); // Estimate: 30min per exercise
+  const writingCount = userSubmissions.length;
+  
+  // Compute average scores with IELTS rounding (nearest 0.5)
+  const targetScores = userProgress.map(s => s.target_score).filter((v) => typeof v === 'number');
+  const rawTargetAvg = targetScores.length > 0 ? targetScores.reduce((sum, v) => sum + v, 0) / targetScores.length : 7.0;
+  const targetScore = Math.round(rawTargetAvg * 2) / 2; // Round to nearest 0.5
+  
+  const currentLevels = userProgress.map(s => s.current_level).filter((v) => typeof v === 'number');
+  const rawCurrentAvg = currentLevels.length > 0 ? 
+    currentLevels.reduce((sum, level) => sum + level, 0) / currentLevels.length : 0;
+  const currentScore = Math.round(rawCurrentAvg * 2) / 2; // Round to nearest 0.5
+  
+  // More realistic study hours calculation
+  const studyHours = Math.floor(totalExercises * 0.75 + writingCount * 1.5); // 45min per exercise + 1.5h per writing
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-100 via-white to-purple-100">
@@ -87,6 +147,9 @@ const UserDashboard: React.FC = () => {
               <p className="text-lg text-gray-600 font-medium">
                 Chào mừng bạn đến với dashboard học IELTS cá nhân
               </p>
+              <p className="text-sm text-gray-500 mt-1">
+                📊 Dữ liệu sẽ tự động cập nhật mỗi 30 giây
+              </p>
             </div>
             <div className="text-right flex flex-col items-end gap-3">
               <div className="text-sm text-gray-500">Vai trò</div>
@@ -94,9 +157,15 @@ const UserDashboard: React.FC = () => {
                 {user?.role === 'admin' ? 'Quản trị viên' : 'Học viên'}
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={handleRefresh} className="inline-flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700 hover:bg-blue-100">
-                  <RefreshCw className="w-4 h-4" /> Làm mới
+                <button onClick={handleRefresh} disabled={isLoading} className="inline-flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} /> Làm mới
                 </button>
+                {isAutoRefreshing && (
+                  <div className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    Đang cập nhật...
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -128,7 +197,7 @@ const UserDashboard: React.FC = () => {
               <div>
                 <p className="text-base text-gray-500 font-semibold">Điểm mục tiêu</p>
                 <p className="text-3xl font-extrabold text-gray-900">
-                  {isLoading ? '...' : targetScore.toFixed(1)}
+                  {isLoading ? '...' : isNaN(targetScore) ? '7.0' : (targetScore % 1 === 0 ? targetScore.toFixed(0) : targetScore.toFixed(1))}
                 </p>
               </div>
             </div>
@@ -140,7 +209,7 @@ const UserDashboard: React.FC = () => {
               <div>
                 <p className="text-base text-gray-500 font-semibold">Điểm hiện tại</p>
                 <p className="text-3xl font-extrabold text-gray-900">
-                  {isLoading ? '...' : currentScore > 0 ? currentScore.toFixed(1) : 'Null'}
+                  {isLoading ? '...' : currentScore > 0 ? (currentScore % 1 === 0 ? currentScore.toFixed(0) : currentScore.toFixed(1)) : '0.0'}
                 </p>
               </div>
             </div>
@@ -175,26 +244,36 @@ const UserDashboard: React.FC = () => {
                   <p className="text-red-600 text-lg font-bold mb-4">{errorMsg}</p>
                 </div>
               ) : userProgress.length > 0 ? (
-                userProgress.map((skill) => (
-                  <div key={skill.id} className="mb-6">
-                    <div className="flex justify-between mb-2">
-                      <span className="font-bold text-gray-700 capitalize text-lg">{skill.skill_type}</span>
-                      <span className="text-base text-gray-500">
-                        {(skill.current_level != null ? skill.current_level.toFixed(1) : '—')} / {(skill.target_score != null ? (skill.target_score).toFixed(1) : '—')}
-                      </span>
+                userProgress.map((skill) => {
+                  const skillNames: Record<string, string> = {
+                    'listening': 'Nghe hiểu (Listening)',
+                    'reading': 'Đọc hiểu (Reading)', 
+                    'writing': 'Viết (Writing)',
+                    'speaking': 'Nói (Speaking)'
+                  };
+                  const skillName = skillNames[skill.skill_type] || skill.skill_type;
+                  
+                  return (
+                    <div key={skill.id} className="mb-6">
+                      <div className="flex justify-between mb-2">
+                        <span className="font-bold text-gray-700 text-lg">{skillName}</span>
+                        <span className="text-base text-gray-500">
+                          {(skill.current_level != null ? skill.current_level.toFixed(1) : '—')} / {(skill.target_score != null ? (skill.target_score).toFixed(1) : '—')}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-4">
+                        <div
+                          className={`bg-blue-500 h-4 rounded-full transition-all duration-300`}
+                          style={{ width: `${skill.target_score ? Math.min(((skill.current_level || 0) / skill.target_score) * 100, 100) : 0}%` }}
+                        ></div>
+                      </div>
+                      <div className="flex justify-between text-sm text-gray-500 mt-2">
+                        <span>{skill.completed_exercises} bài đã hoàn thành</span>
+                        <span>{skill.target_score ? `${Math.round(((skill.current_level || 0) / skill.target_score) * 100)}%` : '—'}</span>
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-4">
-                      <div
-                        className={`bg-blue-500 h-4 rounded-full transition-all duration-300`}
-                        style={{ width: `${skill.target_score ? Math.min(((skill.current_level || 0) / skill.target_score) * 100, 100) : 0}%` }}
-                      ></div>
-                    </div>
-                    <div className="flex justify-between text-sm text-gray-500 mt-2">
-                      <span>{skill.completed_exercises} bài đã hoàn thành</span>
-                      <span>{skill.target_score ? `${Math.round(((skill.current_level || 0) / skill.target_score) * 100)}%` : '—'}</span>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="text-center py-10">
                   <BookOpen className="w-20 h-20 text-gray-300 mx-auto mb-4" />
@@ -209,23 +288,28 @@ const UserDashboard: React.FC = () => {
           <div className="bg-white rounded-3xl shadow-2xl p-10 border border-gray-100">
             <h2 className="text-xl font-extrabold text-gray-900 mb-8">Hành động nhanh</h2>
             <div className="space-y-6">
-              <button className="w-full bg-gradient-to-r from-blue-600 to-blue-400 text-white py-4 px-6 rounded-xl shadow-lg hover:scale-105 hover:shadow-xl transition-all duration-200 flex items-center text-lg font-bold">
+              <button
+                className="w-full bg-gradient-to-r from-blue-600 to-blue-400 text-white py-4 px-6 rounded-xl shadow-lg hover:scale-105 hover:shadow-xl transition-all duration-200 flex items-center text-lg font-bold"
+                onClick={() => navigate('/user/lessons')}
+              >
                 <BookOpen className="w-6 h-6 mr-3" />
                 Bài học mới
               </button>
-              <button className="w-full bg-gradient-to-r from-purple-600 to-purple-400 text-white py-4 px-6 rounded-xl shadow-lg hover:scale-105 hover:shadow-xl transition-all duration-200 flex items-center text-lg font-bold">
+              <button
+                className="w-full bg-gradient-to-r from-purple-600 to-purple-400 text-white py-4 px-6 rounded-xl shadow-lg hover:scale-105 hover:shadow-xl transition-all duration-200 flex items-center text-lg font-bold"
+                onClick={() => navigate('/user/writing')}
+              >
                 <Award className="w-6 h-6 mr-3" />
                 Luyện Writing AI
               </button>
-              <button className="w-full bg-gradient-to-r from-green-600 to-green-400 text-white py-4 px-6 rounded-xl shadow-lg hover:scale-105 hover:shadow-xl transition-all duration-200 flex items-center text-lg font-bold">
+              <button
+                className="w-full bg-gradient-to-r from-green-600 to-green-400 text-white py-4 px-6 rounded-xl shadow-lg hover:scale-105 hover:shadow-xl transition-all duration-200 flex items-center text-lg font-bold"
+                onClick={() => navigate('/user/practice-tests')}
+              >
                 <Target className="w-6 h-6 mr-3" />
                 Làm bài test
               </button>
-              <button className="w-full border border-gray-300 text-gray-700 py-4 px-6 rounded-xl hover:bg-gray-50 transition-all duration-200 flex items-center text-lg font-bold">
-                <Users className="w-6 h-6 mr-3" />
-                Tham gia nhóm học
-              </button>
-              
+              {/* Groups feature removed — button intentionally omitted */}
             </div>
           </div>
         </div>
@@ -245,26 +329,64 @@ const UserDashboard: React.FC = () => {
           ) : userSubmissions.length > 0 ? (
             <div className="space-y-6">
               {userSubmissions.map((submission) => {
-                const rawTask = (submission as any).taskType || (submission as any).task_type || 'task';
-                const taskLabel = String(rawTask || 'task').replace(/_/g, ' ');
-                const score = (submission as any).aiScore ?? (submission as any).ai_score ?? null;
-                const created = (submission as any).createdAt || (submission as any).created_at || (submission as any).created_at;
-                const createdDate = created ? new Date(created).toLocaleDateString('vi-VN') : '';
+                const taskTypeMap: Record<string, string> = {
+                  'IELTS_Task1': 'IELTS Task 1',
+                  'IELTS_Task2': 'IELTS Task 2', 
+                  'IELTS_Task1_Academic': 'IELTS Task 1 Academic',
+                  'IELTS_Task1_General': 'IELTS Task 1 General',
+                  'task1': 'Task 1',
+                  'task2': 'Task 2'
+                };
+                
+                const rawTask = submission.taskType || 'writing';
+                const taskLabel = taskTypeMap[rawTask] || rawTask.replace(/_/g, ' ');
+                const score = submission.aiScore ?? null;
+                const created = submission.createdAt;
+                const createdDate = created ? new Date(created).toLocaleString('vi-VN', {
+                  day: '2-digit',
+                  month: '2-digit', 
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                }) : '';
+
+                // Score color coding
+                let scoreColor = 'bg-gray-100 text-gray-800';
+                if (score !== null) {
+                  if (score >= 7.5) scoreColor = 'bg-green-100 text-green-800';
+                  else if (score >= 6.5) scoreColor = 'bg-blue-100 text-blue-800';
+                  else if (score >= 5.5) scoreColor = 'bg-yellow-100 text-yellow-800';
+                  else scoreColor = 'bg-red-100 text-red-800';
+                }
 
                 return (
-                  <div key={(submission as any).id || Math.random()} className="border border-gray-200 rounded-xl p-6 hover:bg-gray-50 transition-colors shadow">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-bold text-gray-900 capitalize text-lg">{taskLabel} Task</h3>
-                      <div className="flex items-center space-x-2">
+                  <div key={submission.id || Math.random()} className="border border-gray-200 rounded-xl p-6 hover:bg-gray-50 transition-colors shadow">
+                    <div className="flex justify-between items-start mb-3">
+                      <h3 className="font-bold text-gray-900 text-lg">{taskLabel}</h3>
+                      <div className="flex items-center space-x-3">
                         {score != null && (
-                          <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded text-base font-bold">{score}/9.0</span>
+                          <span className={`px-3 py-1 rounded-full text-sm font-bold ${scoreColor}`}>
+                            Band {score}/9.0
+                          </span>
                         )}
-                        <span className="text-base text-gray-500">{createdDate}</span>
+                        <span className="text-sm text-gray-500">{createdDate}</span>
                       </div>
                     </div>
-                    <p className="text-gray-700 text-base mb-2 line-clamp-2">{(submission as any).prompt}</p>
-                    {(submission as any).aiFeedback && (
-                      <p className="text-green-600 text-base italic">"{String((submission as any).aiFeedback).slice(0, 100)}..."</p>
+                    <p className="text-gray-700 text-sm mb-2 line-clamp-2 leading-relaxed">
+                      <span className="font-medium text-gray-600">Đề bài:</span> {submission.prompt}
+                    </p>
+                    {submission.aiFeedback && (
+                      <div className="text-green-600 text-sm bg-green-50 p-3 rounded-lg border-l-4 border-green-400 mt-3">
+                        <div className="font-medium text-green-800 mb-1">💬 Nhận xét AI:</div>
+                        <div className="text-green-700">
+                          {Array.isArray(submission.aiFeedback) 
+                            ? submission.aiFeedback.slice(0, 2).map((feedback, idx) => (
+                                <div key={idx} className="mb-1">• {feedback}</div>
+                              ))
+                            : String(submission.aiFeedback).slice(0, 150) + (String(submission.aiFeedback).length > 150 ? '...' : '')
+                          }
+                        </div>
+                      </div>
                     )}
                   </div>
                 );

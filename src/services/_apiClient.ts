@@ -10,7 +10,11 @@ export const apiFetch = async (path: string, options: RequestInit = {}) => {
   const res = await fetch(url, { ...options, headers, credentials: 'include' });
   const text = await res.text();
   let data;
-  try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+  try { 
+    data = text ? JSON.parse(text) : null; 
+  } catch {
+    data = text; 
+  }
   if (!res.ok) {
     return { data: null, error: { message: (data && data.message) || res.statusText } };
   }

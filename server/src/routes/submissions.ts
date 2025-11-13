@@ -1,9 +1,69 @@
 // ...existing code...
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import Submission from '../models/Submission';
+import UserProgress from '../models/UserProgress';
 import { gradeWriting } from '../services/writingGrader';
 
 const router = Router();
+
+/**
+ * Cập nhật UserProgress sau khi có submission mới được chấm điểm
+ */
+async function updateUserProgress(userId: string, skillType: 'listening' | 'reading' | 'writing' | 'speaking', newScore: number) {
+  try {
+    if (!mongoose.isValidObjectId(userId) || !newScore || newScore <= 0) {
+      console.warn(`[UserProgress] Invalid input: userId=${userId}, skillType=${skillType}, score=${newScore}`);
+      return;
+    }
+
+    // Tìm hoặc tạo UserProgress record
+    const progress = await UserProgress.findOneAndUpdate(
+      { user_id: userId, skill_type: skillType },
+      {
+        $setOnInsert: {
+          user_id: userId,
+          skill_type: skillType,
+          target_score: 7.0, // Default target
+          completed_exercises: 0,
+          created_at: new Date()
+        }
+      },
+      { upsert: true, new: false } // Return old document to check if it existed
+    );
+
+    // Tính current_level mới (trung bình có trọng số)
+    const existingLevel = progress?.current_level || 0;
+    const exerciseCount = (progress?.completed_exercises || 0) + 1;
+    
+    let newCurrentLevel: number;
+    if (existingLevel === 0) {
+      // Lần đầu tiên
+      newCurrentLevel = newScore;
+    } else {
+      // Trung bình có trọng số: 70% score cũ + 30% score mới
+      newCurrentLevel = existingLevel * 0.7 + newScore * 0.3;
+    }
+
+    // Cập nhật progress
+    await UserProgress.updateOne(
+      { user_id: userId, skill_type: skillType },
+      {
+        $set: {
+          current_level: Math.round(newCurrentLevel * 10) / 10, // Round to 1 decimal
+          updated_at: new Date()
+        },
+        $inc: {
+          completed_exercises: 1
+        }
+      }
+    );
+
+    console.log(`[UserProgress] Updated ${skillType} for user ${userId}: ${existingLevel} → ${newCurrentLevel.toFixed(1)} (${exerciseCount} exercises)`);
+  } catch (error) {
+    console.error(`[UserProgress] Failed to update progress for user ${userId}:`, error);
+  }
+}
 
 function isWritingTask(taskType?: string) {
   return !!taskType && (taskType.startsWith('IELTS') || taskType === 'TOEFL' || taskType === 'Other');
@@ -62,6 +122,9 @@ router.post('/', async (req, res) => {
       // Lưu kết quả chấm điểm vào database
       await doc.save();
       console.log(`[Submissions] Successfully graded writing submission ${doc._id} with score: ${result.score}`);
+      
+      // Cập nhật UserProgress cho kỹ năng Writing
+      await updateUserProgress(payload.user_id, 'writing', result.score);
     }
   } catch (err: any) {
     console.error(`[Submissions] AI grading failed for submission ${doc?._id}:`, {

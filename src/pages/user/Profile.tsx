@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { isApiAvailable, authService } from '../../services/api';
-import { User, Mail, Lock, Camera, Save, Shield } from 'lucide-react';
+import { User, Mail, Lock, Camera, Save, Shield, Target } from 'lucide-react';
+import { userService } from '../../services/user/userService';
 
 const ProfilePage: React.FC = () => {
   const { user, refreshUser } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingTargets, setIsEditingTargets] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingTargets, setIsLoadingTargets] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     fullName: user?.fullName || '',
@@ -15,6 +18,41 @@ const ProfilePage: React.FC = () => {
     newPassword: '',
     confirmPassword: '',
   });
+
+  // Target scores state
+  const [targetScores, setTargetScores] = useState({
+    listening: 7.0,
+    reading: 7.0, 
+    writing: 7.0,
+    speaking: 6.5
+  });
+
+  // Available IELTS band scores
+  const bandScoreOptions = [4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0];
+
+  // Load user progress data
+  useEffect(() => {
+    const loadUserProgress = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const progress = await userService.getUserProgress(user.id);
+        const targets: any = { listening: 7.0, reading: 7.0, writing: 7.0, speaking: 6.5 };
+        
+        progress.forEach(p => {
+          if (p.target_score) {
+            targets[p.skill_type] = p.target_score;
+          }
+        });
+        
+        setTargetScores(targets);
+      } catch (error) {
+        console.error('Failed to load user progress:', error);
+      }
+    };
+
+    loadUserProgress();
+  }, [user?.id]);
 
   const getErrorMessage = (e: unknown) => {
     if (!e) return '';
@@ -76,6 +114,35 @@ const ProfilePage: React.FC = () => {
       setIsSaving(false);
     }
   };
+
+  // Handler for target score changes
+  const handleTargetScoreChange = (skillType: string, score: number) => {
+    setTargetScores(prev => ({ ...prev, [skillType]: score }));
+  };
+
+  // Save target scores
+  const handleSaveTargets = async () => {
+    if (!user?.id) return;
+    
+    setIsLoadingTargets(true);
+    try {
+      // Update each skill's target score
+      for (const [skillType, score] of Object.entries(targetScores)) {
+        await userService.updateTargetScore(user.id, skillType, score);
+      }
+      
+      setIsEditingTargets(false);
+      setStatusMessage('Cập nhật điểm mục tiêu thành công!');
+    } catch (error) {
+      console.error('Failed to save target scores:', error);
+      setStatusMessage('Có lỗi xảy ra khi cập nhật điểm mục tiêu');
+    } finally {
+      setIsLoadingTargets(false);
+    }
+  };
+
+  // Calculate target average
+  const targetAverage = Object.values(targetScores).reduce((sum, score) => sum + score, 0) / 4;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -147,6 +214,81 @@ const ProfilePage: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Target Goals Section */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center">
+                <Target className="w-6 h-6 mr-3 text-blue-600" />
+                <h3 className="text-xl font-bold text-gray-800">Điểm mục tiêu IELTS</h3>
+              </div>
+              <button
+                onClick={() => {
+                  if (isEditingTargets) {
+                    handleSaveTargets();
+                  } else {
+                    setIsEditingTargets(true);
+                  }
+                }}
+                disabled={isLoadingTargets}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center disabled:opacity-60"
+              >
+                {isEditingTargets ? (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Lưu mục tiêu
+                  </>
+                ) : (
+                  <>
+                    <Target className="w-4 h-4 mr-2" />
+                    Chỉnh sửa
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {Object.entries(targetScores).map(([skill, score]) => {
+                const skillNames: Record<string, string> = {
+                  listening: 'Listening',
+                  reading: 'Reading', 
+                  writing: 'Writing',
+                  speaking: 'Speaking'
+                };
+
+                return (
+                  <div key={skill} className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      {skillNames[skill]}
+                    </label>
+                    {isEditingTargets ? (
+                      <select
+                        value={score}
+                        onChange={(e) => handleTargetScoreChange(skill, parseFloat(e.target.value))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {bandScoreOptions.map(band => (
+                          <option key={band} value={band}>{band}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="flex items-center justify-center h-10 bg-gray-50 rounded-lg border">
+                        <span className="text-lg font-semibold text-blue-600">{score}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Average Target Score */}
+            <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+              <div className="text-center">
+                <p className="text-sm text-gray-600 mb-1">Điểm trung bình mục tiêu</p>
+                <p className="text-2xl font-bold text-blue-600">{targetAverage.toFixed(1)}</p>
+              </div>
+            </div>
+          </div>
 
           {/* Profile Form */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

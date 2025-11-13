@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { User, Mail, Lock, Camera, Save, Shield } from 'lucide-react';
+import { User, Mail, Lock, Camera, Save, Shield, Target } from 'lucide-react';
+import { userService } from '../services/user/userService';
 
 const ProfilePage: React.FC = () => {
   const { user } = useAuth(); // Remove updateProfile for now
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingTargets, setIsEditingTargets] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     fullName: user?.fullName || '',
     email: user?.email || '',
@@ -12,6 +15,41 @@ const ProfilePage: React.FC = () => {
     newPassword: '',
     confirmPassword: '',
   });
+
+  // Target scores state
+  const [targetScores, setTargetScores] = useState({
+    listening: 7.0,
+    reading: 7.0, 
+    writing: 7.0,
+    speaking: 6.5
+  });
+
+  // Available IELTS band scores
+  const bandScoreOptions = [4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0];
+
+  // Load user progress data
+  useEffect(() => {
+    const loadUserProgress = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const progress = await userService.getUserProgress(user.id);
+        const targets: any = { listening: 7.0, reading: 7.0, writing: 7.0, speaking: 6.5 };
+        
+        progress.forEach(p => {
+          if (p.target_score) {
+            targets[p.skill_type] = p.target_score;
+          }
+        });
+        
+        setTargetScores(targets);
+      } catch (error) {
+        console.error('Failed to load user progress:', error);
+      }
+    };
+
+    loadUserProgress();
+  }, [user?.id]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -24,6 +62,39 @@ const ProfilePage: React.FC = () => {
     // Implementation for profile update
     console.log('Saving profile:', formData);
     setIsEditing(false);
+  };
+
+  const handleSaveTargets = async () => {
+    if (!user?.id) return;
+    
+    setIsLoading(true);
+    try {
+      // Update target scores for each skill
+      const updates = Object.entries(targetScores).map(async ([skillType, targetScore]) => {
+        const response = await fetch(`http://localhost:4000/users/${user.id}/progress/${skillType}/target`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ target_score: targetScore })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to update ${skillType} target score`);
+        }
+        
+        return response.json();
+      });
+
+      await Promise.all(updates);
+      setIsEditingTargets(false);
+      
+      // Show success message (you can add a toast notification here)
+      console.log('Target scores updated successfully:', targetScores);
+    } catch (error) {
+      console.error('Failed to update target scores:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -69,6 +140,115 @@ const ProfilePage: React.FC = () => {
                   </span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Target Goals Section */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-800 flex items-center">
+                <Target className="w-6 h-6 mr-3 text-blue-600" />
+                Mục tiêu học tập IELTS
+              </h3>
+              <button
+                onClick={isEditingTargets ? handleSaveTargets : () => setIsEditingTargets(true)}
+                disabled={isLoading}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? 'Đang lưu...' : (isEditingTargets ? 'Lưu mục tiêu' : 'Chỉnh sửa')}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {/* Listening Target */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Listening (Nghe)
+                </label>
+                <select
+                  value={targetScores.listening}
+                  onChange={(e) => setTargetScores({...targetScores, listening: parseFloat(e.target.value)})}
+                  disabled={!isEditingTargets}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center font-bold ${
+                    !isEditingTargets ? 'bg-gray-50 cursor-not-allowed' : 'bg-white'
+                  }`}
+                >
+                  {bandScoreOptions.map(score => (
+                    <option key={score} value={score}>{score}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Reading Target */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Reading (Đọc)
+                </label>
+                <select
+                  value={targetScores.reading}
+                  onChange={(e) => setTargetScores({...targetScores, reading: parseFloat(e.target.value)})}
+                  disabled={!isEditingTargets}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center font-bold ${
+                    !isEditingTargets ? 'bg-gray-50 cursor-not-allowed' : 'bg-white'
+                  }`}
+                >
+                  {bandScoreOptions.map(score => (
+                    <option key={score} value={score}>{score}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Writing Target */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Writing (Viết)
+                </label>
+                <select
+                  value={targetScores.writing}
+                  onChange={(e) => setTargetScores({...targetScores, writing: parseFloat(e.target.value)})}
+                  disabled={!isEditingTargets}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center font-bold ${
+                    !isEditingTargets ? 'bg-gray-50 cursor-not-allowed' : 'bg-white'
+                  }`}
+                >
+                  {bandScoreOptions.map(score => (
+                    <option key={score} value={score}>{score}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Speaking Target */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Speaking (Nói)
+                </label>
+                <select
+                  value={targetScores.speaking}
+                  onChange={(e) => setTargetScores({...targetScores, speaking: parseFloat(e.target.value)})}
+                  disabled={!isEditingTargets}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center font-bold ${
+                    !isEditingTargets ? 'bg-gray-50 cursor-not-allowed' : 'bg-white'
+                  }`}
+                >
+                  {bandScoreOptions.map(score => (
+                    <option key={score} value={score}>{score}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-700">
+                <strong>Mục tiêu tổng:</strong> Band {(() => {
+                  const avg = (targetScores.listening + targetScores.reading + targetScores.writing + targetScores.speaking) / 4;
+                  // Round to nearest 0.5 for IELTS band score format
+                  const rounded = Math.round(avg * 2) / 2;
+                  return rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1);
+                })()}
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                Điều chỉnh mục tiêu cho phù hợp với trình độ và thời gian luyện thi của bạn
+              </p>
             </div>
           </div>
 

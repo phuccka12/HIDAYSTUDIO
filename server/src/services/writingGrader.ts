@@ -42,16 +42,51 @@ function normalizeScore(n: number) {
  */
 function extractFirstJson(s: string): string | null {
   if (!s) return null;
-  const start = s.indexOf('{');
+  
+  // Clean up the string first - remove markdown code blocks
+  let cleaned = s.trim();
+  
+  // Remove ```json and ``` markers if present
+  cleaned = cleaned.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
+  cleaned = cleaned.replace(/^```\s*/i, '').replace(/\s*```$/i, '');
+  
+  const start = cleaned.indexOf('{');
   if (start === -1) return null;
+  
   let depth = 0;
-  for (let i = start; i < s.length; i++) {
-    const ch = s[i];
-    if (ch === '{') depth++;
-    else if (ch === '}') {
+  let inString = false;
+  let escaped = false;
+  
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    
+    if (ch === '\\') {
+      escaped = true;
+      continue;
+    }
+    
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    
+    if (inString) continue;
+    
+    if (ch === '{') {
+      depth++;
+    } else if (ch === '}') {
       depth--;
       if (depth === 0) {
-        return s.slice(start, i + 1);
+        const candidate = cleaned.slice(start, i + 1);
+        // Basic validation - check if it looks like valid JSON structure
+        if (candidate.includes('"score"') || candidate.includes('"criteria"') || candidate.includes('"feedback"')) {
+          return candidate;
+        }
       }
     }
   }
@@ -100,54 +135,46 @@ function buildPrompt(taskPrompt: string, userAnswer: string): string {
 
 **NGÔN NGỮ**: Tất cả output (feedback, rationale, corrected_answer, suggested_corrections) PHẢI BẰNG TIẾNG VIỆT. Không có phần text nào bằng tiếng Anh.
 
-**YÊU CẦU ĐẦU RA**: Trả về DUY NHẤT một chuỗi JSON (KHÔNG có giải thích bổ sung bên ngoài JSON). Dưới đây là định dạng JSON bắt buộc (giữ nguyên các trường):
+**YÊU CẦU ĐẦU RA**: Trả về DUY NHẤT một chuỗi JSON hợp lệ (KHÔNG có giải thích bổ sung bên ngoài JSON). Đảm bảo JSON syntax chính xác - không có trailing commas, quotes đúng chuẩn, và structure hoàn chỉnh.
 
+**ĐỊNH DẠNG JSON BẮT BUỘC**:
 {
-  "score": number,                     // điểm tổng (0..9, bước 0.5)
+  "score": 0.0,
   "criteria": {
-    "task_response": number,          // 0..9 (0.5 steps)
-    "coherence": number,
-    "lexical": number,
-    "grammar": number
+    "task_response": 0.0,
+    "coherence": 0.0,
+    "lexical": 0.0,
+    "grammar": 0.0
   },
-  "confidence": {                      // độ tự tin của LLM cho từng tiêu chí (0-100)
-    "task_response": number,
-    "coherence": number,
-    "lexical": number,
-    "grammar": number,
-    "overall": number
+  "confidence": {
+    "task_response": 85,
+    "coherence": 90,
+    "lexical": 75,
+    "grammar": 80,
+    "overall": 85
   },
-  "rationale": [                      // Các lý do chính (ngắn gọn) dẫn tới điểm - mảng tối đa 4 phần
-    "Lý do 1 (ví dụ: thiếu overview, luận điểm mơ hồ)",
-    "Lý do 2"
+  "rationale": [
+    "Lý do chính cho điểm số này",
+    "Điểm mạnh và điểm yếu chính"
   ],
-  "feedback": [                        // Các hướng cải thiện ngắn (Vietnamese), tối đa 8 dòng
-    "Phản hồi nhiệm vụ: ...",
-    "Tính mạch lạc và liên kết: ...",
-    "Từ vựng: ...",
-    "Ngữ pháp: ..."
+  "feedback": [
+    "Task Response (Trả lời đề bài): Đánh giá cách trả lời yêu cầu đề bài",
+    "Coherence & Cohesion (Mạch lạc & Liên kết): Đánh giá tính logic và liên kết",
+    "Lexical Resource (Từ vựng): Đánh giá việc sử dụng từ vựng",
+    "Grammatical Range & Accuracy (Ngữ pháp): Đánh giá ngữ pháp và cấu trúc câu"
   ],
-  "suggested_corrections": "...",    // Tóm tắt các sửa lỗi quan trọng (1-3 câu)
-  "corrected_answer": "...",        // Phiên bản được chỉnh sửa của bài (nếu cần, giữ nguyên ý, tối đa 300 từ)
-  "vocab_upgrades": [                  // Những thay đổi nâng cấp từ vựng (khuyến khích): tối đa 8 mục
-    { "original": "...", "suggestion": "...", "reason": "..." }
-  ],
-  "edits": [                            // (tùy chọn) danh sách sửa/ghi lại đoạn/ câu: {original, corrected, reason}
-    { "original": "...", "corrected": "...", "reason": "..." }
-  ],
-  "raw": "..."                       // (tùy chọn) phần output thô từ LLM để debug
+  "suggested_corrections": "Tóm tắt 2-3 cải thiện quan trọng nhất",
+  "corrected_answer": ""
 }
 
-HƯỚNG DẪN CHI TIẾT CHO LLM:
-- Chỉ trả về CHUỖI JSON hợp lệ duy nhất, KHÔNG có chú thích hay giải thích phía ngoài.
-- Các điểm cho mỗi tiêu chí phải là số (0..9) và làm tròn đến bước 0.5.
-- 'score' là trung bình cộng của 4 tiêu chí, làm tròn về 0.5.
-- 'confidence' là con số 0-100 cho thấy mức tin cậy của LLM về từng tiêu chí và overall.
-- 'rationale' hãy đưa những phát hiện trọng yếu nhất (ví dụ: thiếu overview, luận điểm chưa rõ, lặp ý, từ vựng hạn chế, lỗi ngữ pháp nghiêm trọng).
-- 'feedback' cung cấp các gợi ý hành động rõ ràng cho học sinh (ví dụ: "Thêm một câu overview ở đoạn 1", "Sử dụng linking words: however, moreover..." — nhưng bằng tiếng Việt).
-- Nếu bài có lỗi ngữ pháp hoặc lựa chọn từ không tự nhiên, hãy trả 'corrected_answer' — phiên bản được hiệu đính, vẫn giữ ý chính, viết tự nhiên và ngắn gọn (không thêm ý mới). Nếu bài đã tốt, 'corrected_answer' có thể là chuỗi rỗng.
-- 'suggested_corrections' là tóm tắt 1-3 sửa chính cần thực hiện ngay.
-- Luôn đảm bảo 'feedback' và 'rationale' viết bằng TIẾNG VIỆT, không dùng từ tiếng Anh trong phần này.
+**HƯỚNG DẪN QUAN TRỌNG**:
+1. Trả về DUY NHẤT chuỗi JSON hợp lệ - không có text nào khác
+2. Tất cả điểm số từ 0-9, bước 0.5 (ví dụ: 6.5, 7.0, 7.5)
+3. Score = trung bình của 4 tiêu chí, làm tròn về 0.5
+4. Confidence = số từ 0-100 cho độ tin cậy
+5. Tất cả feedback và rationale PHẢI bằng tiếng Việt
+6. Suggested_corrections: tóm tắt 2-3 điểm cần sửa ngay
+7. Corrected_answer: để trống "" nếu bài ổn, hoặc viết lại ngắn gọn nếu có lỗi lớn
 
 THỐNG KÊ BÀI VIẾT:
 - Số từ bài học sinh: ${wordCount} (yêu cầu: ${taskInfo.type === 'task1' ? '150+' : '250+'})
@@ -243,52 +270,105 @@ export async function gradeWriting(taskPrompt: string, userAnswer: string): Prom
 }
 
 /**
- * Parse và validate response từ LLM
+ * Clean và fix JSON string trước khi parse
+ */
+function cleanJsonString(jsonStr: string): string {
+  if (!jsonStr) return jsonStr;
+  
+  // Remove BOM and invisible characters
+  let cleaned = jsonStr.replace(/^\uFEFF/, '').trim();
+  
+  // Fix common JSON issues
+  cleaned = cleaned
+    // Fix trailing commas
+    .replace(/,(\s*[}\]])/g, '$1')
+    // Fix missing quotes around keys
+    .replace(/(\w+):/g, '"$1":')
+    // Fix single quotes to double quotes (but not inside strings)
+    .replace(/'/g, '"')
+    // Remove comments
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '');
+    
+  return cleaned;
+}
+
+/**
+ * Parse và validate response từ LLM với improved error handling
  */
 function parseGradingResponse(rawText: string, raw: any): WritingGradeResult {
   console.log('[WritingGrader] Parsing LLM response...');
+  console.log('[WritingGrader] Raw response preview:', rawText.substring(0, 200) + '...');
   
-  // Cố gắng trích xuất JSON từ response
-  let jsonCandidate = extractFirstJson(rawText);
-  if (!jsonCandidate) {
-    // Thử tìm JSON trong markdown code block
-    const codeBlockMatch = rawText.match(/```json\s*([\s\S]*?)\s*```/i);
-    if (codeBlockMatch) {
-      jsonCandidate = codeBlockMatch[1].trim();
-    } else {
-      jsonCandidate = rawText;
-    }
-  }
-
-  let parsed: any = null;
   const parseErrors: string[] = [];
-
-  // Thử parse JSON với nhiều cách khác nhau
-  for (const candidate of [jsonCandidate, rawText]) {
+  let parsed: any = null;
+  
+  // Multiple strategies to extract and parse JSON
+  const candidates = [];
+  
+  // Strategy 1: Extract first JSON from raw text
+  const extractedJson = extractFirstJson(rawText);
+  if (extractedJson) {
+    candidates.push({ source: 'extracted', content: extractedJson });
+  }
+  
+  // Strategy 2: Look for JSON in code blocks
+  const codeBlockMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch) {
+    candidates.push({ source: 'codeblock', content: codeBlockMatch[1].trim() });
+  }
+  
+  // Strategy 3: Use raw text as-is
+  candidates.push({ source: 'raw', content: rawText.trim() });
+  
+  // Strategy 4: Try to find JSON-like structure with regex
+  const jsonMatch = rawText.match(/\{[\s\S]*"score"[\s\S]*\}/);
+  if (jsonMatch) {
+    candidates.push({ source: 'regex', content: jsonMatch[0] });
+  }
+  
+  // Try to parse each candidate
+  for (const candidate of candidates) {
     try {
-      parsed = JSON.parse(candidate);
-      console.log('[WritingGrader] Successfully parsed JSON response');
+      const cleaned = cleanJsonString(candidate.content);
+      parsed = JSON.parse(cleaned);
+      console.log(`[WritingGrader] Successfully parsed JSON using ${candidate.source} strategy`);
       break;
     } catch (e) {
-      parseErrors.push(String(e));
+      const error = `${candidate.source}: ${String(e)}`;
+      parseErrors.push(error);
+      console.log(`[WritingGrader] Parse attempt failed (${candidate.source}):`, String(e));
     }
   }
 
+  // If all parsing failed, try to create a minimal valid response
   if (!parsed) {
-    console.error('[WritingGrader] Failed to parse JSON response:', parseErrors);
+    console.error('[WritingGrader] All JSON parse attempts failed:', parseErrors);
+    
+    // Last resort: try to extract score manually using regex
+    const scoreMatch = rawText.match(/"score"?\s*:?\s*(\d+(?:\.\d+)?)/i);
+    const extractedScore = scoreMatch ? parseFloat(scoreMatch[1]) : 0;
+    
+    console.log(`[WritingGrader] Attempting recovery with extracted score: ${extractedScore}`);
+    
     return {
-      score: 0,
+      score: normalizeScore(extractedScore),
       feedback: [
-        'Không thể phân tích kết quả chấm tự động.',
-        `Parse errors: ${parseErrors.slice(0, 2).join(', ')}`,
-        `Raw response preview: ${rawText.slice(0, 500)}...`
+        'AI chấm điểm thành công nhưng kết quả chi tiết bị lỗi định dạng.',
+        `Điểm ước tính: ${normalizeScore(extractedScore)}`,
+        'Vui lòng thử lại hoặc liên hệ hỗ trợ kỹ thuật.'
       ],
-      details: { parse_error: true, parse_errors: parseErrors },
-      raw: rawText
+      details: { 
+        parse_error: true, 
+        parse_errors: parseErrors.slice(0, 3),
+        extracted_score: extractedScore,
+        recovery_mode: true
+      },
+      raw: rawText.substring(0, 1000) // Limit raw text to avoid overwhelming
     };
   }
 
-  // Validate và extract điểm số
+  // Successfully parsed - validate and extract results
   return extractGradingResults(parsed, rawText);
 }
 
@@ -354,7 +434,7 @@ function extractGradingResults(parsed: any, rawText: string): WritingGradeResult
 }
 
 /**
- * Extract feedback từ parsed response
+ * Extract feedback từ parsed response và đảm bảo có đầy đủ 4 tiêu chí IELTS
  */
 function extractFeedback(parsed: any): string[] {
   let feedback: string[] = [];
@@ -372,18 +452,94 @@ function extractFeedback(parsed: any): string[] {
       .slice(0, 8);
   }
 
-  // Convert English labels to Vietnamese
+  // Convert English labels to Vietnamese và chuẩn hóa 4 tiêu chí
   feedback = feedback.map(item => {
     return item
-      .replace(/^Task Response:/i, 'Phản hồi nhiệm vụ:')
-      .replace(/^Coherence & Cohesion:/i, 'Tính mạch lạc và liên kết:')
-      .replace(/^Coherence and Cohesion:/i, 'Tính mạch lạc và liên kết:')
-      .replace(/^Lexical Resource:/i, 'Từ vựng:')
-      .replace(/^Grammar:/i, 'Ngữ pháp:')
-      .replace(/^Grammatical Range and Accuracy:/i, 'Ngữ pháp:');
+      .replace(/^Task Response:/i, 'Task Response (Trả lời đề bài):')
+      .replace(/^Coherence & Cohesion:/i, 'Coherence & Cohesion (Mạch lạc & Liên kết):')
+      .replace(/^Coherence and Cohesion:/i, 'Coherence & Cohesion (Mạch lạc & Liên kết):')
+      .replace(/^Lexical Resource:/i, 'Lexical Resource (Từ vựng):')
+      .replace(/^Grammar:/i, 'Grammatical Range & Accuracy (Ngữ pháp):')
+      .replace(/^Grammatical Range and Accuracy:/i, 'Grammatical Range & Accuracy (Ngữ pháp):');
   });
 
+  // Đảm bảo có đầy đủ 4 tiêu chí IELTS nếu thiếu
+  const criteriaLabels = [
+    'Task Response (Trả lời đề bài):',
+    'Coherence & Cohesion (Mạch lạc & Liên kết):',
+    'Lexical Resource (Từ vựng):',
+    'Grammatical Range & Accuracy (Ngữ pháp):'
+  ];
+
+  const missingCriteria: string[] = [];
+  for (const label of criteriaLabels) {
+    const found = feedback.some(item => item.startsWith(label));
+    if (!found) {
+      missingCriteria.push(label);
+    }
+  }
+
+  // Thêm các tiêu chí còn thiếu với feedback mặc định
+  if (missingCriteria.length > 0 && parsed.criteria) {
+    for (const missing of missingCriteria) {
+      const criteriaName = missing.split('(')[0].trim().toLowerCase().replace(/\s+/g, '_');
+      let score = 0;
+      
+      if (criteriaName.includes('task_response') || criteriaName.includes('task response')) {
+        score = parsed.criteria.task_response || 0;
+      } else if (criteriaName.includes('coherence')) {
+        score = parsed.criteria.coherence || 0;
+      } else if (criteriaName.includes('lexical')) {
+        score = parsed.criteria.lexical || 0;
+      } else if (criteriaName.includes('grammatical')) {
+        score = parsed.criteria.grammar || 0;
+      }
+      
+      const defaultFeedback = generateCriteriaFeedback(score, missing);
+      feedback.push(defaultFeedback);
+    }
+  }
+
   return feedback;
+}
+
+/**
+ * Tạo feedback cho từng tiêu chí dựa trên điểm số
+ */
+function generateCriteriaFeedback(score: number, criteriaLabel: string): string {
+  const getPerformanceLevel = (score: number): string => {
+    if (score >= 8) return 'Xuất sắc';
+    if (score >= 7) return 'Tốt';
+    if (score >= 6) return 'Khá';
+    if (score >= 5) return 'Trung bình';
+    if (score >= 4) return 'Yếu';
+    return 'Kém';
+  };
+
+  const getSuggestion = (criteriaLabel: string, score: number): string => {
+    if (criteriaLabel.includes('Task Response')) {
+      if (score >= 7) return 'Trả lời đúng và đầy đủ yêu cầu đề bài.';
+      return 'Cần trả lời đầy đủ hơn các câu hỏi trong đề bài.';
+    }
+    if (criteriaLabel.includes('Coherence')) {
+      if (score >= 7) return 'Ý tưởng được sắp xếp logic và liên kết tốt.';
+      return 'Cần cải thiện cách sắp xếp ý và sử dụng từ nối.';
+    }
+    if (criteriaLabel.includes('Lexical')) {
+      if (score >= 7) return 'Từ vựng đa dạng và phù hợp ngữ cảnh.';
+      return 'Nên mở rộng vốn từ vựng và dùng từ chính xác hơn.';
+    }
+    if (criteriaLabel.includes('Grammatical')) {
+      if (score >= 7) return 'Ngữ pháp chính xác với cấu trúc câu đa dạng.';
+      return 'Cần cải thiện ngữ pháp và đa dạng hóa cấu trúc câu.';
+    }
+    return 'Cần tiếp tục luyện tập để cải thiện.';
+  };
+
+  const level = getPerformanceLevel(score);
+  const suggestion = getSuggestion(criteriaLabel, score);
+  
+  return `${criteriaLabel} ${level} (${score}/9) - ${suggestion}`;
 }
   
 function generateFallbackFeedback(criteria: any, overall: number): string[] {

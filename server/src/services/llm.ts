@@ -76,12 +76,12 @@ export async function findWorkingModel(): Promise<string> {
   }
   
   const candidates = [
-    'models/gemini-2.0-flash-exp',
-    'models/gemini-2.0-flash',
-    'models/gemini-1.5-flash-latest',
     'models/gemini-1.5-flash',
+    'models/gemini-1.5-flash-latest',
     'models/gemini-1.5-pro-latest', 
-    'models/gemini-1.5-pro'
+    'models/gemini-1.5-pro',
+    'models/gemini-2.0-flash-exp',
+    'models/gemini-2.0-flash'
   ];
   
   try {
@@ -206,11 +206,11 @@ export async function callLLMForText(prompt: string) {
       console.log('[LLM] Model not found, trying alternatives...');
       
       const alternatives = [
-        'models/gemini-2.0-flash-exp',
-        'models/gemini-2.0-flash',
         'models/gemini-1.5-flash',
+        'models/gemini-1.5-flash-latest',
         'models/gemini-1.5-pro',
-        'models/gemini-1.5-flash-latest'
+        'models/gemini-2.0-flash-exp',
+        'models/gemini-2.0-flash'
       ];
       
       for (const altModel of alternatives) {
