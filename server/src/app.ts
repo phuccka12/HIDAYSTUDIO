@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import mongoose from 'mongoose';
-import dotenv from 'dotenv';
+import * as dotenv from 'dotenv';
 import 'express-async-errors';
 import authRoutes from './routes/auth';
 import profileRoutes from './routes/profiles';
@@ -16,6 +16,9 @@ import writingRouter from './routes/writing';
 import testRouter from './routes/test';
 import debugRouter from './routes/debug';
 import path from 'path';
+
+// Load environment variables from server/.env when present
+dotenv.config();
 
 const app = express();
 
@@ -42,9 +45,6 @@ app.use('/writing', writingRouter);
 app.use('/test', testRouter);
 app.use('/debug', debugRouter);
 app.get('/', (_req, res) => res.json({ status: 'ok' }));
-
-// Load environment variables from server/.env when present
-dotenv.config();
 
 // Accept either MONGO_URL or MONGODB_URI for compatibility
 const MONGO_URL = process.env.MONGO_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017/ielts-dev';
