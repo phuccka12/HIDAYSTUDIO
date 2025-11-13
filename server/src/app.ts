@@ -1,6 +1,6 @@
-import express from 'express';
-import cors from 'cors';
-import cookieParser from 'cookie-parser';
+import * as express from 'express';
+import * as cors from 'cors';
+import * as cookieParser from 'cookie-parser';
 import mongoose from 'mongoose';
 import * as dotenv from 'dotenv';
 import 'express-async-errors';
@@ -15,7 +15,7 @@ import llmRouter from './routes/llm';
 import writingRouter from './routes/writing';
 import testRouter from './routes/test';
 import debugRouter from './routes/debug';
-import path from 'path';
+import * as path from 'path';
 
 // Load environment variables from server/.env when present
 dotenv.config();
