@@ -282,11 +282,7 @@ function cleanJsonString(jsonStr: string): string {
   cleaned = cleaned
     // Fix trailing commas
     .replace(/,(\s*[}\]])/g, '$1')
-    // Fix missing quotes around keys
-    .replace(/(\w+):/g, '"$1":')
-    // Fix single quotes to double quotes (but not inside strings)
-    .replace(/'/g, '"')
-    // Remove comments
+    // Remove block and line comments
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/.*$/gm, '');
     
@@ -327,18 +323,44 @@ function parseGradingResponse(rawText: string, raw: any): WritingGradeResult {
     candidates.push({ source: 'regex', content: jsonMatch[0] });
   }
   
-  // Try to parse each candidate
+  // Try several parsing strategies with increasing aggressiveness.
   for (const candidate of candidates) {
-    try {
-      const cleaned = cleanJsonString(candidate.content);
-      parsed = JSON.parse(cleaned);
-      console.log(`[WritingGrader] Successfully parsed JSON using ${candidate.source} strategy`);
-      break;
-    } catch (e) {
-      const error = `${candidate.source}: ${String(e)}`;
-      parseErrors.push(error);
-      console.log(`[WritingGrader] Parse attempt failed (${candidate.source}):`, String(e));
+    // Try several parsing strategies with increasing aggressiveness.
+    const strategies = [
+      { name: 'direct', transform: (s: string) => s },
+      { name: 'stripFences', transform: (s: string) => s.replace(/```(?:json)?\s*([\s\S]*?)\s*```/i, '$1').trim() },
+      { name: 'extractedFirstJson', transform: (s: string) => { const ext = extractFirstJson(s); return ext || s; } },
+      { name: 'removeBackticks', transform: (s: string) => s.replace(/`+/g, '') },
+      { name: 'removeTrailingCommas', transform: (s: string) => cleanJsonString(s).replace(/,\s*(?=[}\]])/g, '') },
+      // last resort: try to quote unquoted keys (only when necessary)
+      { name: 'quoteKeys', transform: (s: string) => {
+        let t = cleanJsonString(s);
+        // Quote unquoted object keys that appear after { or ,
+        t = t.replace(/([,{]\s*)([A-Za-z0-9_\-]+)\s*:/g, '$1"$2":');
+        // Replace single-quoted strings with double quotes (best-effort)
+        t = t.replace(/'([^']*)'/g, '"$1"');
+        // Remove any leftover backticks
+        t = t.replace(/`+/g, '');
+        return t;
+      } }
+    ];
+
+    let lastError: any = null;
+    for (const strat of strategies) {
+      try {
+        const candidateText = typeof candidate.content === 'string' ? candidate.content : String(candidate.content);
+        const transformed = strat.transform(candidateText);
+        parsed = JSON.parse(transformed);
+        console.log(`[WritingGrader] Successfully parsed JSON using ${candidate.source} -> ${strat.name} strategy`);
+        break;
+      } catch (e) {
+        const error = `${candidate.source}/${strat.name}: ${String(e)}`;
+        parseErrors.push(error);
+        lastError = e;
+        console.log(`[WritingGrader] Parse attempt failed (${candidate.source}/${strat.name}):`, String(e));
+      }
     }
+    if (parsed) break;
   }
 
   // If all parsing failed, try to create a minimal valid response

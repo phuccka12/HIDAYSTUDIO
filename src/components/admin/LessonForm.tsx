@@ -1,5 +1,5 @@
 import { useState } from 'react';
-// Media disabled per request: do not use MediaGallery
+import MediaGallery from './MediaGallery';
 import { adminCreateLesson, adminUpdateLesson } from '../../services/content';
 
 type Props = {
@@ -13,9 +13,8 @@ export default function LessonForm({ initial = {}, onSave, onCancel }: Props) {
   const [slug, setSlug] = useState<string>(initial.slug || '');
   const [description, setDescription] = useState<string>(initial.description || '');
   const [content, setContent] = useState<string>(initial.content || '');
-  // media removed: no longer tracking uploaded files here
+  const [media, setMedia] = useState<any[]>(initial.media || []);
   const [published, setPublished] = useState<boolean>(Boolean(initial.published));
-  // uploading handled inside MediaGallery
 
   function slugify(input: string) {
     return String(input).toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '');
@@ -24,9 +23,7 @@ export default function LessonForm({ initial = {}, onSave, onCancel }: Props) {
   // media upload is handled by MediaGallery component
 
   async function handleSave() {
-    // Strip any image markdown inserted previously (e.g. ![](/uploads/...)) since media is disabled
-    const sanitizedContent = (content || '').replace(/!\[[^\]]*\]\([^\)]+\)/g, '').trim();
-    const payload = { title: title?.trim(), slug: slug?.trim(), description: description?.trim(), content: sanitizedContent, published };
+    const payload = { title: title?.trim(), slug: slug?.trim(), description: description?.trim(), content: content?.trim(), published, media };
     try {
       if (initial && initial._id) {
         const { data } = await adminUpdateLesson(initial._id, payload) as any;
@@ -94,7 +91,11 @@ export default function LessonForm({ initial = {}, onSave, onCancel }: Props) {
             <textarea className="h-48 w-full rounded-xl border border-gray-200 bg-white p-3 font-mono text-sm shadow-sm focus:ring-2 focus:ring-indigo-500" value={content} onChange={(e) => setContent(e.target.value)} placeholder="## Tiêu đề chính\nNội dung..." />
           </div>
 
-          {/* Media disabled: uploads removed per preference */}
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-sm font-medium">Tệp đính kèm (PDF, hình ảnh)</label>
+            <p className="mb-2 text-xs text-gray-500">Upload PDF bài giảng hoặc hình ảnh. Học sinh sẽ thấy trong phần tệp đính kèm.</p>
+            <MediaGallery media={media} onChange={setMedia} onInsert={(url) => setContent((c) => `${c}\n\n![](${url})`)} />
+          </div>
         </div>
       </div>
 

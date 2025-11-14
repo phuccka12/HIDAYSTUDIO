@@ -39,8 +39,13 @@ router.post('/admin/uploads', upload.single('file'), async (req: any, res) => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-  const urlPath = `/uploads/${req.file.filename}`;
-  res.json({ ok: true, url: urlPath, filename: req.file.filename });
+  
+  // Return absolute URL with backend host
+  const protocol = req.protocol || 'http';
+  const host = req.get('host') || 'localhost:4001';
+  const fullUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+  
+  res.json({ ok: true, url: fullUrl, filename: req.file.filename });
 });
 
 export default router;

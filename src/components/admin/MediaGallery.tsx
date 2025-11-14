@@ -59,9 +59,21 @@ export default function MediaGallery({
                   <div className="flex h-32 items-center justify-center text-xs text-gray-600">{it.filename || 'file'}</div>
                 )}
               </div>
-              <div className="space-x-2 p-2">
-                <button className="inline-flex w-[48%] items-center justify-center rounded-lg bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700" onClick={() => onInsert?.(it.url)}>Chèn</button>
-                <button className="inline-flex w-[48%] items-center justify-center rounded-lg bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200" onClick={() => navigator.clipboard?.writeText(it.url)}>Sao chép URL</button>
+              <div className="flex flex-col gap-2 p-2">
+                <div className="flex gap-2">
+                  <button className="inline-flex flex-1 items-center justify-center rounded-lg bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700" onClick={() => onInsert?.(it.url)}>Chèn</button>
+                  <button className="inline-flex flex-1 items-center justify-center rounded-lg bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200" onClick={() => navigator.clipboard?.writeText(it.url)}>Sao chép</button>
+                </div>
+                <button 
+                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50" 
+                  onClick={() => {
+                    if (window.confirm(`Xóa tệp "${it.filename || 'file'}"?\nTệp sẽ bị xóa khỏi danh sách (file vẫn còn trên server).`)) {
+                      onChange(media.filter((_, i) => i !== idx));
+                    }
+                  }}
+                >
+                  🗑️ Xóa
+                </button>
               </div>
             </div>
           ))}

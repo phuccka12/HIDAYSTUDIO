@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import content from "../services/content";
 
@@ -92,6 +92,11 @@ const LessonDetail: React.FC = () => {
   const [lesson, setLesson] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Timer state
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const timerIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -114,6 +119,23 @@ const LessonDetail: React.FC = () => {
       mounted = false;
     };
   }, [id]);
+
+  // Timer effect
+  useEffect(() => {
+    if (timerRunning) {
+      timerIntervalRef.current = window.setInterval(() => {
+        setTimerSeconds(prev => prev + 1);
+      }, 1000);
+    } else if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    };
+  }, [timerRunning]);
 
   const rawHtml = pick(lesson, "content", "<p>Không có nội dung</p>");
   const { html } = useProcessedHtml(rawHtml);
@@ -148,7 +170,20 @@ const LessonDetail: React.FC = () => {
   const level = pick(lesson, "level", "");
   const category = pick(lesson, "category", "");
   const updatedAt = pick(lesson, "updated_at", pick(lesson, "updatedAt", pick(lesson, "created_at", pick(lesson, "createdAt", ""))));
-  const attachments = Array.isArray(lesson?.attachments) ? lesson.attachments : [];
+  const attachments = Array.isArray(lesson?.attachments) ? lesson.attachments : Array.isArray(lesson?.media) ? lesson.media : [];
+
+  // Find first PDF for inline viewer
+  const firstPdf = attachments.find((f: any) => 
+    f?.url?.toLowerCase().endsWith('.pdf') || f?.type?.toLowerCase().includes('pdf')
+  );
+
+  // Debug log
+  console.log('🔍 Lesson data:', { 
+    media: lesson?.media, 
+    attachments: lesson?.attachments, 
+    finalAttachments: attachments,
+    firstPdf
+  });
 
   return (
     <div className="p-6">
@@ -169,7 +204,69 @@ const LessonDetail: React.FC = () => {
           <span className="inline-flex items-center gap-1">⏱️ {readingMin} phút đọc</span>
           {updatedAt && <span className="inline-flex items-center gap-1">🗓️ Cập nhật: {fmtDate(updatedAt)}</span>}
         </div>
+
+        {/* Timer */}
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-blue-900">⏱ Thời gian học:</span>
+            <span className="text-2xl font-mono font-bold text-blue-700">
+              {Math.floor(timerSeconds / 60).toString().padStart(2, '0')}:{(timerSeconds % 60).toString().padStart(2, '0')}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            {!timerRunning ? (
+              <button
+                onClick={() => setTimerRunning(true)}
+                className="inline-flex items-center rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-green-700"
+              >
+                ▶️ Bắt đầu
+              </button>
+            ) : (
+              <button
+                onClick={() => setTimerRunning(false)}
+                className="inline-flex items-center rounded-lg bg-yellow-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-yellow-700"
+              >
+                ⏸️ Tạm dừng
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setTimerRunning(false);
+                setTimerSeconds(0);
+              }}
+              className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              🔄 Đặt lại
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* Inline PDF Viewer - Always visible when PDF exists */}
+      {firstPdf && (
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-900">📄 {firstPdf.filename || 'Tài liệu PDF'}</h3>
+            <a
+              href={firstPdf.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Mở tab mới
+            </a>
+          </div>
+          <iframe
+            src={firstPdf.url}
+            className="w-full rounded-lg border border-slate-200"
+            style={{ height: '800px' }}
+            title="PDF Viewer"
+          />
+        </div>
+      )}
 
       {/* Layout: content + aside */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -182,31 +279,36 @@ const LessonDetail: React.FC = () => {
         {/* Right column: attachments + quick actions (TOC removed) */}
         <aside className="space-y-6">
           {/* Attachments */}
-          {attachments.length > 0 && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">Tệp đính kèm</h3>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900">Tệp đính kèm</h3>
+            {attachments.length > 0 ? (
               <ul className="mt-2 space-y-2 text-sm">
-                {attachments.map((f: any, idx: number) => (
-                  <li key={f?.id || idx} className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-slate-700">{f?.name || f?.filename || `Tệp ${idx + 1}`}</p>
-                      {f?.size && <p className="text-xs text-slate-500">{Math.round((Number(f.size) || 0) / 1024)} KB</p>}
-                    </div>
-                    {f?.url && (
-                      <a
-                        className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-                        href={f.url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Tải xuống
-                      </a>
-                    )}
-                  </li>
-                ))}
+                {attachments.map((f: any, idx: number) => {
+                  const isPdf = f?.url?.toLowerCase().endsWith('.pdf') || f?.type?.toLowerCase().includes('pdf');
+                  return (
+                    <li key={f?.id || idx} className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-slate-700">{f?.name || f?.filename || `Tệp ${idx + 1}`}</p>
+                        {f?.size && <p className="text-xs text-slate-500">{Math.round((Number(f.size) || 0) / 1024)} KB</p>}
+                      </div>
+                      {f?.url && (
+                        <a
+                          href={f.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                        >
+                          {isPdf ? 'Mở' : 'Tải xuống'}
+                        </a>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
-            </div>
-          )}
+            ) : (
+              <p className="mt-2 text-sm text-slate-500">Chưa có tệp đính kèm nào.</p>
+            )}
+          </div>
 
           {/* Actions */}
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
