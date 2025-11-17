@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { BookOpen, Target, TrendingUp, Clock, Award, RefreshCw } from 'lucide-react';
+import { BookOpen, Target, TrendingUp, Award, RefreshCw } from 'lucide-react';
 import { userService, type UserProgressItem, type UserProfile } from '../../services/user/userService';
 import type { WritingSubmission } from '../../services/dashboard';
 
@@ -130,9 +130,6 @@ const UserDashboard: React.FC = () => {
   const rawCurrentAvg = currentLevels.length > 0 ? 
     currentLevels.reduce((sum, level) => sum + level, 0) / currentLevels.length : 0;
   const currentScore = Math.round(rawCurrentAvg * 2) / 2; // Round to nearest 0.5
-  
-  // More realistic study hours calculation
-  const studyHours = Math.floor(totalExercises * 0.75 + writingCount * 1.5); // 45min per exercise + 1.5h per writing
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-100 via-white to-purple-100">
@@ -177,7 +174,7 @@ const UserDashboard: React.FC = () => {
             <p className="text-red-600 text-lg font-bold mb-4">{errorMsg}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-10">
             <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl shadow-xl p-8 flex items-center gap-6 border border-blue-100">
               <div className="p-4 bg-blue-200 rounded-full shadow-lg">
                 <BookOpen className="w-8 h-8 text-blue-700" />
@@ -210,18 +207,6 @@ const UserDashboard: React.FC = () => {
                 <p className="text-base text-gray-500 font-semibold">Điểm hiện tại</p>
                 <p className="text-3xl font-extrabold text-gray-900">
                   {isLoading ? '...' : currentScore > 0 ? (currentScore % 1 === 0 ? currentScore.toFixed(0) : currentScore.toFixed(1)) : '0.0'}
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl shadow-xl p-8 flex items-center gap-6 border border-orange-100">
-              <div className="p-4 bg-orange-200 rounded-full shadow-lg">
-                <Clock className="w-8 h-8 text-orange-700" />
-              </div>
-              <div>
-                <p className="text-base text-gray-500 font-semibold">Thời gian học</p>
-                <p className="text-3xl font-extrabold text-gray-900">
-                  {isLoading ? '...' : `${studyHours}h`}
                 </p>
               </div>
             </div>

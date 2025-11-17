@@ -13,6 +13,7 @@ import UserProfilePage from '../pages/user/Profile';
 import UserLayout from '../components/user/layout/UserLayout';
 import WritingPractice from '../pages/user/WritingPractice';
 import WritingHistory from '../pages/user/WritingHistory';
+import TestHistory from '../pages/user/TestHistory';
 import ProtectedRoute from '../components/common/ProtectedRoute';
 import NotFoundPage from '../pages/NotFoundPage';
 import ExamDetail from '../pages/ExamDetail';
@@ -49,6 +50,10 @@ const router = createBrowserRouter([
       {
         path: 'writing-history',
         element: <WritingHistory />,
+      },
+      {
+        path: 'progress',
+        element: <TestHistory />,
       },
       {
         path: 'practice-tests',

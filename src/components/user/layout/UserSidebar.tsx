@@ -18,7 +18,7 @@ const UserSidebar: React.FC = () => {
         </li>
         <li>
           <Link to="/user/progress" className="flex items-center gap-3 py-3 px-4 rounded-xl hover:bg-green-50 transition-colors text-green-700">
-            <BarChart2 className="w-6 h-6 text-green-600" /> My Progress
+            <BarChart2 className="w-6 h-6 text-green-600" /> Lịch sử thi thử
           </Link>
         </li>
         <li>

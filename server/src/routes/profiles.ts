@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import User from '../models/User';
 import Submission from '../models/Submission';
 import Attempt from '../models/Attempt';
-import Notification from '../models/Notification';
+import Exam from '../models/Exam';
 import UserProgress from '../models/UserProgress';
 import requireAuth from '../middleware/auth';
 
@@ -122,33 +122,113 @@ router.get('/me/dashboard', requireAuth, async (req: any, res) => {
 
     console.log('[Dashboard] Fetching data for user:', userId.toString());
 
-    // Parallel fetch: recent submissions (writing), recent attempts (exams), notifications, user progress
-    const [submissions, attempts, notifications, userProgress] = await Promise.all([
+    // Parallel fetch: recent submissions (writing), recent attempts (exams), user progress
+    const [submissions, attempts, userProgress] = await Promise.all([
       Submission.find({ user_id: userId }).sort({ created_at: -1 }).limit(20).lean(),
       Attempt.find({ userId: userId }).sort({ submittedAt: -1 }).limit(20).lean(),
-      Notification.find({ $or: [{ userId: userId }, { broadcast: true }] }).sort({ created_at: -1 }).limit(20).lean(),
       UserProgress.find({ user_id: userId }).lean()
     ]);
 
     console.log('[Dashboard] Found submissions:', submissions.length);
+    console.log('[Dashboard] Found attempts:', attempts.length);
+
+    // Fetch exams for attempts to get section information
+    const examIds = attempts.map(a => a.examId).filter(Boolean);
+    const exams = await Exam.find({ _id: { $in: examIds } }).lean();
+    const examMap = new Map(exams.map(e => [e._id.toString(), e]));
+
+    // Calculate skill progress dynamically based on attempts and submissions
+    const skillStats: Record<string, { scores: number[], count: number }> = {
+      listening: { scores: [], count: 0 },
+      reading: { scores: [], count: 0 },
+      writing: { scores: [], count: 0 },
+      speaking: { scores: [], count: 0 }
+    };
+
+    // Process exam attempts - extract skills from exam sections AND slug/title
+    attempts.forEach(attempt => {
+      // Accept both 'graded' and 'submitted' status since attempts auto-grade on submit
+      const isGraded = attempt.status === 'graded' || attempt.status === 'submitted';
+      if (isGraded && attempt.score != null && attempt.details?.totalPossible) {
+        const exam = examMap.get(attempt.examId.toString());
+        if (exam && exam.sections) {
+          // Convert raw score to scale of 10
+          const scoreOutOf10 = (attempt.score / attempt.details.totalPossible) * 10;
+          const roundedScore = Math.round(scoreOutOf10 * 10) / 10;
+          
+          // Get unique section types from this exam
+          const sectionTypes = [...new Set(exam.sections.map(s => s.type))];
+          
+          // Check if exam slug or title indicates a specific skill test
+          const slug = exam.slug?.toLowerCase() || '';
+          const title = exam.title?.toLowerCase() || '';
+          let targetSkill: string | null = null;
+          
+          if (slug.includes('listening') || title.includes('listening')) targetSkill = 'listening';
+          else if (slug.includes('reading') || title.includes('reading')) targetSkill = 'reading';
+          else if (slug.includes('writing') || title.includes('writing')) targetSkill = 'writing';
+          else if (slug.includes('speaking') || title.includes('speaking')) targetSkill = 'speaking';
+          
+          // If slug/title specifies a skill, only count for that skill
+          if (targetSkill && skillStats[targetSkill]) {
+            skillStats[targetSkill].scores.push(roundedScore);
+            skillStats[targetSkill].count++;
+          } else {
+            // Otherwise distribute across all section types
+            sectionTypes.forEach(skillType => {
+              if (skillStats[skillType]) {
+                skillStats[skillType].scores.push(roundedScore);
+                skillStats[skillType].count++;
+              }
+            });
+          }
+        }
+      }
+    });
+
+    // Process writing submissions - AI graded writing counts as writing skill (scaled to 10)
+    submissions.forEach(submission => {
+      if (submission.ai_score != null) {
+        // AI score is already on IELTS scale (0-9), convert to 10-point scale
+        const scoreOutOf10 = (submission.ai_score / 9) * 10;
+        const roundedScore = Math.round(scoreOutOf10 * 10) / 10;
+        skillStats.writing.scores.push(roundedScore);
+        skillStats.writing.count++;
+      }
+    });
+
+    // Build skill progress array with calculated averages
+    const skillProgress = Object.entries(skillStats).map(([skillType, stats]) => {
+      const avgScore = stats.scores.length > 0 
+        ? stats.scores.reduce((sum, s) => sum + s, 0) / stats.scores.length 
+        : 0;
+      
+      // Round to nearest 0.5 (IELTS standard)
+      const currentLevel = Math.round(avgScore * 2) / 2;
+      
+      // Get target from UserProgress if exists, otherwise default to 7.0
+      const existingProgress = userProgress.find(p => p.skill_type === skillType);
+      const targetScore = existingProgress?.target_score || 7.0;
+
+      return {
+        id: existingProgress?._id || new mongoose.Types.ObjectId(),
+        user_id: userId,
+        skill_type: skillType,
+        current_level: currentLevel,
+        target_score: targetScore,
+        completed_exercises: stats.count,
+        created_at: existingProgress?.created_at || new Date(),
+        updated_at: new Date()
+      };
+    });
+
+    console.log('[Dashboard] Calculated skill progress:', skillProgress);
 
     // Aggregate simple stats
     const aiScores = {
       average: submissions && submissions.length ? (submissions.reduce((s: number, x: any) => s + (x.ai_score || 0), 0) / submissions.length) : null,
       latest: submissions.slice(0, 5).map(s => ({ id: s._id, ai_score: s.ai_score, graded_at: s.graded_at }))
     };
-
-    // Map user progress to match frontend expectations
-    const skillProgress = userProgress.map(p => ({
-      id: p._id,
-      user_id: p.user_id,
-      skill_type: p.skill_type,
-      current_level: p.current_level,
-      target_score: p.target_score,
-      completed_exercises: p.completed_exercises,
-      created_at: p.created_at,
-      updated_at: p.updated_at
-    }));
 
     const progress = {
       attemptsCount: attempts.length,
@@ -171,6 +251,33 @@ router.get('/me/dashboard', requireAuth, async (req: any, res) => {
       graded_at: s.graded_at
     }));
 
+    // Map attempts with exam details for test history
+    const testHistory = attempts.map(attempt => {
+      const exam = examMap.get(attempt.examId?.toString());
+      
+      // Convert raw score to scale of 10
+      let displayScore = attempt.score;
+      if (attempt.details && attempt.details.totalPossible) {
+        // Calculate score out of 10: (correct / total) * 10
+        displayScore = (attempt.score / attempt.details.totalPossible) * 10;
+        displayScore = Math.round(displayScore * 10) / 10; // Round to 1 decimal place
+      }
+      
+      return {
+        id: attempt._id,
+        examId: attempt.examId,
+        examTitle: exam?.title || 'Bài thi IELTS',
+        examSections: exam?.sections ? [...new Set(exam.sections.map((s: any) => s.type))] : [],
+        startedAt: attempt.startedAt,
+        submittedAt: attempt.submittedAt,
+        status: attempt.status,
+        score: displayScore,
+        rawScore: attempt.score,
+        totalQuestions: attempt.details?.totalPossible || null,
+        details: attempt.details
+      };
+    });
+
     res.json({
       account: {
         id: user._id,
@@ -181,9 +288,9 @@ router.get('/me/dashboard', requireAuth, async (req: any, res) => {
         created_at: user.created_at
       },
       gradingHistory,
+      testHistory,
       aiScores,
-      progress,
-      notifications: notifications.map(n => ({ id: n._id, title: n.title, body: n.body, read: n.read, created_at: n.created_at }))
+      progress
     });
   } catch (err) {
     console.error('Error fetching /profiles/me/dashboard:', err);

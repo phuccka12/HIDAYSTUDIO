@@ -34,6 +34,19 @@ export interface DashboardData {
     ai_corrections?: string;
     graded_at: string;
   }>;
+  testHistory?: Array<{
+    id: string;
+    examId: string;
+    examTitle: string;
+    examSections: string[];
+    startedAt: string;
+    submittedAt: string;
+    status: 'in_progress' | 'submitted' | 'graded';
+    score?: number;
+    rawScore?: number;
+    totalQuestions?: number;
+    details?: any;
+  }>;
   aiScores: {
     average: number | null;
     latest: Array<{ id: string; ai_score: number | null; graded_at: string }>;
@@ -44,7 +57,7 @@ export interface DashboardData {
     lastAttempt: unknown | null;
     skills: UserProgressItem[];
   };
-  notifications: Array<{
+  notifications?: Array<{
     id: string;
     title: string;
     body: string;
